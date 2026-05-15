@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>部門聚餐投票</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .deadline-banner {
+      background: var(--orange);
+      color: #fff;
+      text-align: center;
+      padding: 10px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .closed-overlay {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--gray-5);
+    }
+    .closed-overlay .icon { font-size: 52px; margin-bottom: 12px; }
+    .closed-overlay h2   { color: var(--label); margin-bottom: 8px; }
+    .name-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--blue-light);
+      color: var(--blue);
+      padding: 4px 12px;
+      border-radius: 100px;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .step-hint {
+      font-size: 14px;
+      color: var(--gray-5);
+      margin-bottom: 14px;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+
+<header class="page-header">
+  <div style="display:flex;align-items:center;justify-content:space-between;">
+    <div>
+      <h1 id="page-title">部門聚餐</h1>
+      <div class="subtitle" id="page-subtitle">載入中…</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <a href="results.html" class="btn btn-secondary btn-sm">查看結果</a>
+      <a href="admin.html" class="btn btn-secondary btn-sm">⚙️</a>
+    </div>
+  </div>
+</header>
+
+<!-- 截止時間提示 -->
+<div class="deadline-banner" id="deadline-banner" style="display:none"></div>
+
+<div class="container" id="main-container">
+  <!-- 載入中 -->
+  <div class="card" style="text-align:center;padding:48px;">
+    <div style="font-size:32px;margin-bottom:12px;">⏳</div>
+    <div style="color:var(--gray-5);">載入投票資料中…</div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+// ── Toast ──
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.className = 'toast'; }, 3000);
+}
+
+// ── Calendar ──
+let currentYear, currentMonth;
+let rangeStart, rangeEnd;
+let unavailableDates = new Set();
+
+function renderCalendar(year, month) {
+  currentYear = year;
+  currentMonth = month;
+
+  const wrap = document.getElementById('cal-wrap');
+  const first = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const startDow = first.getDay(); // 0=Sun
+  const today = new Date();
+
+  const monthNames = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  document.getElementById('cal-month').textContent = `${year} 年 ${monthNames[month]}`;
+
+  let html = `<div class="cal-grid">
+    <div class="cal-dow">日</div><div class="cal-dow">一</div>
+    <div class="cal-dow">二</div><div class="cal-dow">三</div>
+    <div class="cal-dow">四</div><div class="cal-dow">五</div>
+    <div class="cal-dow">六</div>`;
+
+  // 空白格
+  for (let i = 0; i < startDow; i++) html += `<div class="cal-day cal-day--out"></div>`;
+
+  for (let d = 1; d <= lastDay; d++) {
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dow = new Date(dateStr + 'T00:00:00').getDay();
+    const isWeekend = dow === 0 || dow === 6;
+    const inRange = dateStr >= rangeStart && dateStr <= rangeEnd && !isWeekend;
+    const isToday = (d === today.getDate() && month === today.getMonth() && year === today.getFullYear());
+    const isUnavailable = unavailableDates.has(dateStr);
+
+    let cls = 'cal-day';
+    if (!inRange)       cls += ' cal-day--disabled';
+    if (isToday)        cls += ' cal-day--today';
+    if (isUnavailable)  cls += ' cal-day--unavailable';
+
+    const clickAttr = inRange ? `onclick="toggleDate('${dateStr}')"` : '';
+    html += `<div class="${cls}" data-date="${dateStr}" ${clickAttr}>${d}</div>`;
+  }
+
+  // 補滿最後一週
+  const total = startDow + lastDay;
+  const remainder = total % 7;
+  if (remainder > 0) for (let i = 0; i < 7 - remainder; i++) html += `<div class="cal-day cal-day--out"></div>`;
+
+  html += '</div>';
+  wrap.innerHTML = html;
+
+  // 更新導航按鈕狀態
+  updateNavBtns();
+}
+
+function updateNavBtns() {
+  if (!rangeStart || !rangeEnd) return;
+  const rStart = new Date(rangeStart);
+  const rEnd   = new Date(rangeEnd);
+  document.getElementById('cal-prev').disabled =
+    (currentYear < rStart.getFullYear()) ||
+    (currentYear === rStart.getFullYear() && currentMonth <= rStart.getMonth());
+  document.getElementById('cal-next').disabled =
+    (currentYear > rEnd.getFullYear()) ||
+    (currentYear === rEnd.getFullYear() && currentMonth >= rEnd.getMonth());
+}
+
+function prevMonth() {
+  currentMonth--;
+  if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+  renderCalendar(currentYear, currentMonth);
+}
+function nextMonth() {
+  currentMonth++;
+  if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+  renderCalendar(currentYear, currentMonth);
+}
+
+function toggleDate(dateStr) {
+  if (isClosed) return;
+  if (unavailableDates.has(dateStr)) {
+    unavailableDates.delete(dateStr);
+  } else {
+    unavailableDates.add(dateStr);
+  }
+  const el = document.querySelector(`[data-date="${dateStr}"]`);
+  if (el) el.classList.toggle('cal-day--unavailable', unavailableDates.has(dateStr));
+}
+
+// ── Restaurant ──
+let selectedRestaurants = new Set();
+function toggleRestaurant(id) {
+  if (selectedRestaurants.has(id)) {
+    selectedRestaurants.delete(id);
+  } else {
+    selectedRestaurants.add(id);
+  }
+  document.querySelectorAll('.restaurant-option').forEach(el => {
+    el.classList.toggle('selected', selectedRestaurants.has(el.dataset.id));
+  });
+}
+
+// ── State ──
+let isClosed = false;
+let currentUserName = null;
+
+// ── Init ──
+async function init() {
+  const configDoc = await db.collection('config').doc('settings').get();
+
+  if (!configDoc.exists) {
+    document.getElementById('main-container').innerHTML = `
+      <div class="card closed-overlay">
+        <div class="icon">⚙️</div>
+        <h2>尚未設定</h2>
+        <p>請管理員先完成投票設定</p>
+        <br><a href="admin.html" class="btn btn-secondary btn-sm" style="width:auto;">前往管理頁面</a>
+      </div>`;
+    return;
+  }
+
+  const cfg = configDoc.data();
+  rangeStart = cfg.dateRangeStart;
+  rangeEnd   = cfg.dateRangeEnd;
+  const deadline = cfg.deadline ? new Date(cfg.deadline) : null;
+
+  // 標題
+  if (cfg.title) {
+    document.getElementById('page-title').textContent = cfg.title;
+    document.title = cfg.title + ' - 投票';
+  }
+
+  // 截止判斷
+  if (deadline) {
+    const now = new Date();
+    const left = deadline - now;
+    isClosed = left <= 0;
+
+    if (!isClosed) {
+      const banner = document.getElementById('deadline-banner');
+      banner.style.display = 'block';
+      banner.textContent = `截止時間：${deadline.toLocaleString('zh-TW')}`;
+    }
+
+    if (isClosed) {
+      document.getElementById('main-container').innerHTML = `
+        <div class="card closed-overlay">
+          <div class="icon">🔒</div>
+          <h2>投票已截止</h2>
+          <p>感謝所有人的參與！</p>
+          <br><a href="results.html" class="btn btn-primary" style="width:auto;padding:12px 28px;">查看結果</a>
+        </div>`;
+      return;
+    }
+  }
+
+  // 副標題
+  if (rangeStart && rangeEnd) {
+    document.getElementById('page-subtitle').textContent =
+      `投票期間：${rangeStart} ～ ${rangeEnd}`;
+  }
+
+  // 載入餐廳
+  const restSnap = await db.collection('restaurants').orderBy('order').get();
+  const restaurants = [];
+  restSnap.forEach(doc => restaurants.push({ id: doc.id, ...doc.data() }));
+
+  renderForm(restaurants, cfg);
+}
+
+function renderForm(restaurants, cfg) {
+  const rStart = new Date(rangeStart);
+
+  const restHTML = restaurants.length === 0
+    ? `<div class="empty"><div class="icon">🍽</div><p>管理員尚未新增候選餐廳</p></div>`
+    : restaurants.map(r => `
+        <div class="restaurant-option" data-id="${r.id}" onclick="toggleRestaurant('${r.id}')">
+          <div class="radio-circle check-style"></div>
+          <div class="restaurant-info">
+            <div class="restaurant-name">${r.name}</div>
+            ${r.description ? `<div class="restaurant-desc">${r.description}</div>` : ''}
+          </div>
+        </div>`).join('');
+
+  document.getElementById('main-container').innerHTML = `
+    <!-- 姓名 -->
+    <div class="card">
+      <div class="card-label">你是誰</div>
+      <div id="name-display" style="display:none">
+        <div class="name-tag">👤 <span id="name-tag-text"></span></div>
+        <div style="margin-top:8px"><button class="btn btn-secondary btn-sm" onclick="changeName()">更換姓名</button></div>
+      </div>
+      <div id="name-input-wrap">
+        <div class="step-hint">請輸入你的姓名，同一姓名可在截止前重新投票覆蓋。</div>
+        <div class="input-group">
+          <input type="text" id="name-input" placeholder="請輸入姓名" maxlength="20">
+        </div>
+        <div style="margin-top:12px">
+          <button class="btn btn-primary" onclick="confirmName()">確認</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 日曆 -->
+    <div class="card" id="vote-sections" style="display:none">
+      <div class="card-label">標記不能參加的日期</div>
+      <p class="step-hint">點選<strong>不能參加</strong>的日期（可多選），沒點的表示你當天有空。</p>
+
+      <div class="calendar-wrap">
+        <div class="cal-nav">
+          <button class="btn-icon" id="cal-prev" onclick="prevMonth()">‹</button>
+          <span id="cal-month"></span>
+          <button class="btn-icon" id="cal-next" onclick="nextMonth()">›</button>
+        </div>
+        <div id="cal-wrap"></div>
+      </div>
+
+      <div class="legend" style="margin-top:16px">
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--red)"></div> 不能參加
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--gray-2);border:1px solid var(--gray-3)"></div> 可以參加
+        </div>
+      </div>
+    </div>
+
+    <!-- 餐廳 -->
+    <div class="card" id="rest-section" style="display:none">
+      <div class="card-label">投票選餐廳</div>
+      <p class="step-hint">選擇你想去的餐廳（可複選）。</p>
+      <div class="restaurant-list">${restHTML}</div>
+    </div>
+
+    <!-- 送出 -->
+    <div id="submit-section" style="display:none">
+      <button class="btn btn-primary" id="submit-btn" onclick="submitVote()">送出投票</button>
+    </div>`;
+
+  renderCalendar(rStart.getFullYear(), rStart.getMonth());
+
+  // Enter 鍵確認姓名
+  document.getElementById('name-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') confirmName();
+  });
+}
+
+function confirmName() {
+  const val = document.getElementById('name-input').value.trim();
+  if (!val) { showToast('請輸入姓名', 'error'); return; }
+  currentUserName = val;
+  document.getElementById('name-tag-text').textContent = val;
+  document.getElementById('name-display').style.display = 'block';
+  document.getElementById('name-input-wrap').style.display = 'none';
+
+  // 顯示投票區
+  document.getElementById('vote-sections').style.display = 'block';
+  document.getElementById('rest-section').style.display = 'block';
+  document.getElementById('submit-section').style.display = 'block';
+
+  // 嘗試載入舊投票
+  loadPreviousVote(val);
+}
+
+function changeName() {
+  currentUserName = null;
+  unavailableDates = new Set();
+  selectedRestaurants = new Set();
+  document.getElementById('name-display').style.display = 'none';
+  document.getElementById('name-input-wrap').style.display = 'block';
+  document.getElementById('name-input').value = '';
+  document.getElementById('vote-sections').style.display = 'none';
+  document.getElementById('rest-section').style.display = 'none';
+  document.getElementById('submit-section').style.display = 'none';
+  renderCalendar(currentYear, currentMonth);
+}
+
+async function loadPreviousVote(name) {
+  const doc = await db.collection('votes').doc(name).get();
+  if (!doc.exists) return;
+  const data = doc.data();
+
+  // 還原不可參加日期
+  unavailableDates = new Set(data.unavailableDates || []);
+  renderCalendar(currentYear, currentMonth);
+
+  // 還原餐廳
+  selectedRestaurants = new Set(data.restaurantIds || (data.restaurantId ? [data.restaurantId] : []));
+  document.querySelectorAll('.restaurant-option').forEach(el => {
+    el.classList.toggle('selected', selectedRestaurants.has(el.dataset.id));
+  });
+
+  showToast('已載入你上次的投票');
+}
+
+async function submitVote() {
+  if (!currentUserName) { showToast('請先輸入姓名', 'error'); return; }
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.textContent = '送出中…';
+
+  try {
+    await db.collection('votes').doc(currentUserName).set({
+      unavailableDates: Array.from(unavailableDates),
+      restaurantIds: Array.from(selectedRestaurants),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    showToast('投票成功！感謝你的參與 🎉');
+    btn.textContent = '已送出 ✓';
+    setTimeout(() => { btn.disabled = false; btn.textContent = '重新送出'; }, 3000);
+  } catch (e) {
+    showToast('送出失敗，請稍後再試', 'error');
+    btn.disabled = false;
+    btn.textContent = '送出投票';
+  }
+}
+
+init();
+</script>
+</body>
+</html>

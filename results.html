@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>投票結果</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .winner-card {
+      background: linear-gradient(135deg, #34C759, #30D158);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      color: #fff;
+      text-align: center;
+      box-shadow: 0 4px 20px rgba(52,199,89,.35);
+    }
+    .winner-card .icon  { font-size: 40px; margin-bottom: 8px; }
+    .winner-card .date  { font-size: 28px; font-weight: 700; letter-spacing: -.5px; margin-bottom: 4px; }
+    .winner-card .count { font-size: 15px; opacity: .85; }
+    .tie-badge { background: rgba(255,255,255,.25); border-radius: 6px; padding: 2px 8px; font-size: 13px; margin-left: 8px; }
+
+    .rest-winner {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px;
+      background: var(--blue-light);
+      border-radius: var(--radius-sm);
+      border: 1.5px solid rgba(0,122,255,.15);
+      margin-bottom: 10px;
+    }
+    .rest-winner .trophy { font-size: 28px; }
+    .rest-winner .name   { font-size: 17px; font-weight: 600; color: var(--blue); }
+    .rest-winner .votes  { font-size: 13px; color: var(--gray-5); margin-top: 2px; }
+
+    .refresh-hint {
+      text-align: center;
+      font-size: 13px;
+      color: var(--gray-4);
+      padding: 8px;
+    }
+  </style>
+</head>
+<body>
+
+<header class="page-header">
+  <div style="display:flex;align-items:center;justify-content:space-between;">
+    <div>
+      <h1 id="page-title">投票結果</h1>
+      <div class="subtitle" id="page-subtitle">即時統計</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <a href="index.html" class="btn btn-secondary btn-sm">回投票頁</a>
+      <a href="admin.html" class="btn btn-secondary btn-sm">⚙️</a>
+    </div>
+  </div>
+</header>
+
+<div class="container" id="main-container">
+  <div class="card" style="text-align:center;padding:48px;">
+    <div style="font-size:32px;margin-bottom:12px;">📊</div>
+    <div style="color:var(--gray-5);">載入結果中…</div>
+  </div>
+</div>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+let rangeStart, rangeEnd, totalVoters;
+let calYear, calMonth;
+let dateAvailMap = {}; // dateStr -> availableCount
+let restaurantVotes = {};
+
+async function init() {
+  const [configDoc, votesSnap, restSnap] = await Promise.all([
+    db.collection('config').doc('settings').get(),
+    db.collection('votes').get(),
+    db.collection('restaurants').orderBy('order').get()
+  ]);
+
+  if (!configDoc.exists) {
+    document.getElementById('main-container').innerHTML = `
+      <div class="card" style="text-align:center;padding:40px">
+        <div style="font-size:40px;margin-bottom:12px">⚙️</div>
+        <h2>尚未設定</h2><p style="color:var(--gray-5);margin-top:8px">請管理員完成設定後再查看結果</p>
+      </div>`;
+    return;
+  }
+
+  const cfg = configDoc.data();
+  rangeStart = cfg.dateRangeStart;
+  rangeEnd   = cfg.dateRangeEnd;
+  if (cfg.title) {
+    document.getElementById('page-title').textContent = cfg.title + ' — 結果';
+    document.title = cfg.title + ' - 結果';
+  }
+
+  // 統計人數
+  totalVoters = votesSnap.size;
+  document.getElementById('page-subtitle').textContent = `共 ${totalVoters} 人投票`;
+
+  // 建立所有日期 map（排除六日）
+  const allDates = getDatesInRange(rangeStart, rangeEnd);
+  allDates.forEach(d => {
+    const dow = new Date(d + 'T00:00:00').getDay();
+    if (dow !== 0 && dow !== 6) dateAvailMap[d] = totalVoters;
+  });
+
+  // 計算每天不可參加人數 → 可參加 = 總人 - 不可參加
+  votesSnap.forEach(doc => {
+    const data = doc.data();
+    (data.unavailableDates || []).forEach(d => {
+      if (dateAvailMap[d] !== undefined) dateAvailMap[d]--;
+    });
+    const ids = data.restaurantIds || (data.restaurantId ? [data.restaurantId] : []);
+    ids.forEach(id => {
+      restaurantVotes[id] = (restaurantVotes[id] || 0) + 1;
+    });
+  });
+
+  // 整理餐廳
+  const restaurants = [];
+  restSnap.forEach(doc => restaurants.push({ id: doc.id, ...doc.data() }));
+
+  const rStart = new Date(rangeStart);
+  calYear  = rStart.getFullYear();
+  calMonth = rStart.getMonth();
+
+  const isClosed = cfg.deadline ? new Date(cfg.deadline) <= new Date() : false;
+  render(allDates, restaurants, cfg, isClosed);
+}
+
+function getDatesInRange(start, end) {
+  const dates = [];
+  let cur = new Date(start);
+  const last = new Date(end);
+  while (cur <= last) {
+    dates.push(cur.toISOString().slice(0,10));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return dates;
+}
+
+function render(allDates, restaurants, cfg, isClosed) {
+  // 找最佳日期
+  const maxAvail = Math.max(...Object.values(dateAvailMap), 0);
+  const bestDates = Object.keys(dateAvailMap).filter(d => dateAvailMap[d] === maxAvail);
+
+  // 找最高票餐廳
+  let bestRestId = null, bestRestVotes = 0;
+  Object.entries(restaurantVotes).forEach(([id, v]) => {
+    if (v > bestRestVotes) { bestRestVotes = v; bestRestId = id; }
+  });
+  const bestRest = restaurants.find(r => r.id === bestRestId);
+  const topRests = restaurants.filter(r => (restaurantVotes[r.id] || 0) === bestRestVotes && bestRestVotes > 0);
+
+  let html = '';
+
+  // ── 截止後排名卡 ──
+  if (isClosed && totalVoters > 0) {
+    // 日期排名：取前5名（平手全列）
+    const sorted = Object.entries(dateAvailMap)
+      .sort((a, b) => b[1] - a[1]);
+    const top5Cutoff = [...new Set(sorted.map(e => e[1]))].slice(0, 5);
+    const top5Dates = sorted.filter(e => top5Cutoff.includes(e[1]));
+
+    const dateRankHTML = top5Dates.map(([ds, count], i) => {
+      const rank = top5Cutoff.indexOf(count) + 1;
+      const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+      return `
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--gray-1)">
+          <div style="font-size:22px;flex:0 0 32px;text-align:center">${medals[rank-1] || rank}</div>
+          <div style="flex:1;font-size:15px;font-weight:500">${formatDate(ds)}</div>
+          <div style="font-size:14px;color:var(--gray-5)">${count} / ${totalVoters} 人可參加</div>
+        </div>`;
+    }).join('');
+
+    const restWinnerHTML = topRests.map(r => `
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--gray-1)">
+        <div style="font-size:22px">🏆</div>
+        <div style="flex:1;font-size:15px;font-weight:500">${r.name}</div>
+        <div style="font-size:14px;color:var(--gray-5)">${restaurantVotes[r.id]} 票</div>
+      </div>`).join('');
+
+    html += `
+      <div class="card" style="border:2px solid var(--green)">
+        <div class="card-label" style="color:var(--green)">投票截止 — 最終結果</div>
+        <div style="font-size:13px;font-weight:600;color:var(--gray-5);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">可參加日期排名</div>
+        ${dateRankHTML}
+        <div style="font-size:13px;font-weight:600;color:var(--gray-5);margin:16px 0 8px;text-transform:uppercase;letter-spacing:.4px">餐廳票選結果</div>
+        ${restWinnerHTML || '<div style="color:var(--gray-4);font-size:14px;padding:8px 0">尚無餐廳票數</div>'}
+      </div>`;
+  }
+
+  // ── 統計卡 ──
+  html += `
+    <div class="card">
+      <div class="card-label">投票統計</div>
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="number">${totalVoters}</div>
+          <div class="label">已投票人數</div>
+        </div>
+        <div class="stat-card">
+          <div class="number" style="color:var(--green)">${maxAvail}</div>
+          <div class="label">最多可參加</div>
+        </div>
+        <div class="stat-card">
+          <div class="number" style="color:var(--blue)">${restaurants.length}</div>
+          <div class="label">候選餐廳</div>
+        </div>
+      </div>
+    </div>`;
+
+
+  // ── 日曆 ──
+  html += `
+    <div class="card">
+      <div class="card-label">每日可參加人數</div>
+      <div class="calendar-wrap">
+        <div class="cal-nav">
+          <button class="btn-icon" id="cal-prev" onclick="prevMonth()">‹</button>
+          <span id="cal-month"></span>
+          <button class="btn-icon" id="cal-next" onclick="nextMonth()">›</button>
+        </div>
+        <div id="cal-wrap"></div>
+      </div>
+      <div class="legend" style="margin-top:16px">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> 最多人可參加</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#A8E6B8"></div> 次多</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--gray-2)"></div> 較少人可參加</div>
+      </div>
+    </div>`;
+
+  // ── 餐廳結果 ──
+  html += `<div class="card">
+    <div class="card-label">餐廳票選結果</div>`;
+
+  if (restaurants.length === 0) {
+    html += `<div class="empty"><div class="icon">🍽</div><p>尚無候選餐廳</p></div>`;
+  } else {
+    const totalRestVotes = Object.values(restaurantVotes).reduce((a,b)=>a+b, 0);
+
+    // 排序：票多的在前
+    const sorted = [...restaurants].sort((a,b) =>
+      (restaurantVotes[b.id]||0) - (restaurantVotes[a.id]||0));
+
+    if (bestRest && bestRestVotes > 0) {
+      html += `<div class="rest-winner">
+        <div class="trophy">🏆</div>
+        <div>
+          <div class="name">${bestRest.name}</div>
+          <div class="votes">${bestRestVotes} 票 · ${totalRestVotes > 0 ? Math.round(bestRestVotes/totalRestVotes*100) : 0}%</div>
+        </div>
+      </div>`;
+    }
+
+    sorted.forEach((r, i) => {
+      const votes = restaurantVotes[r.id] || 0;
+      const pct   = totalRestVotes > 0 ? Math.round(votes / totalRestVotes * 100) : 0;
+      const isTop = r.id === bestRestId && votes > 0;
+      html += `
+        <div class="result-row">
+          <div class="result-label">${r.name}</div>
+          <div class="result-bar-wrap">
+            <div class="result-bar ${isTop?'top':''}" style="width:${pct}%"></div>
+          </div>
+          <div class="result-count">${votes}</div>
+        </div>`;
+    });
+  }
+
+  html += '</div>';
+  html += `<p class="refresh-hint">重新整理頁面以更新結果</p>`;
+
+  document.getElementById('main-container').innerHTML = html;
+  renderCalendar(calYear, calMonth);
+}
+
+function formatDate(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const days = ['日','一','二','三','四','五','六'];
+  return `${d.getMonth()+1}/${d.getDate()}（${days[d.getDay()]}）`;
+}
+
+// ── Calendar ──
+function renderCalendar(year, month) {
+  calYear = year; calMonth = month;
+  const wrap = document.getElementById('cal-wrap');
+  const monthNames = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  document.getElementById('cal-month').textContent = `${year} 年 ${monthNames[month]}`;
+
+  const first  = new Date(year, month, 1);
+  const last   = new Date(year, month + 1, 0).getDate();
+  const startDow = first.getDay();
+  const today    = new Date();
+
+  // 計算色彩等級
+  const allVals = Object.values(dateAvailMap).filter(v => v > 0);
+  const maxV = allVals.length ? Math.max(...allVals) : 1;
+
+  let html = `<div class="cal-grid">
+    <div class="cal-dow">日</div><div class="cal-dow">一</div>
+    <div class="cal-dow">二</div><div class="cal-dow">三</div>
+    <div class="cal-dow">四</div><div class="cal-dow">五</div>
+    <div class="cal-dow">六</div>`;
+
+  for (let i = 0; i < startDow; i++) html += `<div class="cal-day cal-day--out"></div>`;
+
+  for (let d = 1; d <= last; d++) {
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dow = new Date(dateStr + 'T00:00:00').getDay();
+    const isWeekend = dow === 0 || dow === 6;
+    const inRange = dateAvailMap[dateStr] !== undefined && !isWeekend;
+    const isToday = (d === today.getDate() && month === today.getMonth() && year === today.getFullYear());
+    const count   = inRange ? dateAvailMap[dateStr] : null;
+
+    let cls = 'cal-day';
+    if (!inRange)        cls += ' cal-day--out';
+    else if (count === maxV && count > 0) cls += ' cal-day--best';
+    else if (count >= maxV * .75) cls += ' cal-day--good';
+    else if (count >= maxV * .4)  cls += ' cal-day--mid';
+    else                           cls += ' cal-day--low';
+    if (isToday) cls += ' cal-day--today';
+
+    const badge = (inRange && count !== null && totalVoters > 0)
+      ? `<span class="count-badge">${count}</span>` : '';
+
+    html += `<div class="${cls}">${d}${badge}</div>`;
+  }
+
+  const total = startDow + last;
+  const rem = total % 7;
+  if (rem > 0) for (let i = 0; i < 7 - rem; i++) html += `<div class="cal-day cal-day--out"></div>`;
+  html += '</div>';
+  wrap.innerHTML = html;
+
+  updateNavBtns();
+}
+
+function updateNavBtns() {
+  if (!rangeStart || !rangeEnd) return;
+  const rs = new Date(rangeStart), re = new Date(rangeEnd);
+  document.getElementById('cal-prev').disabled =
+    calYear < rs.getFullYear() || (calYear === rs.getFullYear() && calMonth <= rs.getMonth());
+  document.getElementById('cal-next').disabled =
+    calYear > re.getFullYear() || (calYear === re.getFullYear() && calMonth >= re.getMonth());
+}
+
+function prevMonth() {
+  calMonth--;
+  if (calMonth < 0) { calMonth = 11; calYear--; }
+  renderCalendar(calYear, calMonth);
+}
+function nextMonth() {
+  calMonth++;
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  renderCalendar(calYear, calMonth);
+}
+
+init();
+</script>
+</body>
+</html>

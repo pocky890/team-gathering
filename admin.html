@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理後台</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .section-gap { display:flex; flex-direction:column; gap:20px; }
+    .settings-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media(max-width:480px){ .settings-row { grid-template-columns:1fr; } }
+    .add-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .add-row input { flex:1; }
+    .add-row .btn  { flex-shrink:0; white-space:nowrap; }
+    .desc-input {
+      margin-top: 8px;
+    }
+    .save-btn-wrap {
+      position: sticky;
+      bottom: 20px;
+    }
+    .danger-zone {
+      border: 1.5px solid var(--red-light);
+      border-radius: var(--radius-lg);
+      padding: 20px 24px;
+    }
+    .danger-zone h3 { color: var(--red); margin-bottom: 12px; }
+    .stat-inline {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .stat-pill {
+      background: var(--gray-1);
+      border-radius: 100px;
+      padding: 6px 14px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .stat-pill span { font-weight: 700; color: var(--blue); }
+  </style>
+</head>
+<body>
+
+<!-- 密碼門 -->
+<div class="auth-gate" id="auth-gate">
+  <div class="auth-card">
+    <div class="icon">🔐</div>
+    <h1>管理後台</h1>
+    <p>請輸入管理員密碼</p>
+    <div class="input-group" style="text-align:left;margin-bottom:16px">
+      <input type="password" id="pw-input" placeholder="密碼" autofocus>
+    </div>
+    <button class="btn btn-primary" onclick="checkPassword()">進入</button>
+    <div id="pw-error" style="color:var(--red);font-size:14px;margin-top:12px;display:none">密碼錯誤，請再試一次</div>
+  </div>
+</div>
+
+<!-- 後台主體 -->
+<div id="admin-body" style="display:none">
+  <header class="page-header">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <h1>管理後台</h1>
+        <div class="subtitle">部門聚餐投票設定</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <a href="index.html" class="btn btn-secondary btn-sm">投票頁</a>
+        <a href="results.html" class="btn btn-secondary btn-sm">結果頁</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="container section-gap">
+
+    <!-- 統計 -->
+    <div class="card" id="stats-card">
+      <div class="card-label">目前狀況</div>
+      <div class="stat-inline" id="stats-row">
+        <div class="stat-pill">載入中…</div>
+      </div>
+    </div>
+
+    <!-- 基本設定 -->
+    <div class="card">
+      <div class="card-label">投票設定</div>
+
+      <div class="input-group" style="margin-bottom:16px">
+        <label>活動標題</label>
+        <input type="text" id="cfg-title" placeholder="例：2024 下半年部門聚餐">
+      </div>
+
+      <div class="settings-row">
+        <div class="input-group">
+          <label>日曆開始日期</label>
+          <input type="date" id="cfg-start">
+        </div>
+        <div class="input-group">
+          <label>日曆結束日期</label>
+          <input type="date" id="cfg-end">
+        </div>
+      </div>
+
+      <div class="input-group" style="margin-top:16px">
+        <label>投票截止時間</label>
+        <input type="datetime-local" id="cfg-deadline">
+      </div>
+
+      <div style="margin-top:20px">
+        <button class="btn btn-primary" onclick="saveSettings()">儲存設定</button>
+      </div>
+    </div>
+
+    <!-- 密碼 -->
+    <div class="card">
+      <div class="card-label">更改管理員密碼</div>
+      <div class="settings-row">
+        <div class="input-group">
+          <label>新密碼</label>
+          <input type="password" id="new-pw" placeholder="輸入新密碼">
+        </div>
+        <div class="input-group">
+          <label>確認新密碼</label>
+          <input type="password" id="new-pw2" placeholder="再輸入一次">
+        </div>
+      </div>
+      <div style="margin-top:16px">
+        <button class="btn btn-secondary" onclick="changePassword()" style="width:auto;padding:12px 24px">更新密碼</button>
+      </div>
+    </div>
+
+    <!-- 餐廳管理 -->
+    <div class="card">
+      <div class="card-label">候選餐廳管理</div>
+
+      <div id="restaurant-list">
+        <div style="text-align:center;padding:24px;color:var(--gray-4)">載入中…</div>
+      </div>
+
+      <div class="divider" style="margin:16px 0"></div>
+
+      <div style="font-size:14px;font-weight:500;color:var(--label-2);margin-bottom:10px">新增餐廳</div>
+      <div class="input-group">
+        <input type="text" id="add-name" placeholder="餐廳名稱（必填）">
+      </div>
+      <div class="desc-input">
+        <input type="text" id="add-desc" placeholder="補充說明（選填，如：燒肉、信義區、$600/人）" style="background:var(--gray-1)">
+      </div>
+      <div style="margin-top:12px">
+        <button class="btn btn-primary" onclick="addRestaurant()">新增餐廳</button>
+      </div>
+    </div>
+
+    <!-- 投票者名單 -->
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div class="card-label" style="margin-bottom:0">投票者名單</div>
+        <button class="btn btn-secondary btn-sm" onclick="loadVoterList()">重新整理</button>
+      </div>
+      <div id="voter-list">
+        <div style="text-align:center;padding:24px;color:var(--gray-4)">載入中…</div>
+      </div>
+    </div>
+
+    <!-- 危險區域 -->
+    <div class="danger-zone">
+      <h3>危險區域</h3>
+      <p style="font-size:14px;color:var(--gray-5);margin-bottom:16px">以下操作無法復原，請謹慎使用。</p>
+      <button class="btn btn-danger" onclick="clearVotes()">清除所有投票資料</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+// ── 密碼 ──
+let adminPassword = null;
+let sessionAuthed = false;
+
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.className = 'toast'; }, 3200);
+}
+
+async function checkPassword() {
+  const input = document.getElementById('pw-input').value;
+  if (!input) return;
+
+  // 從 Firestore 拿設定
+  const doc = await db.collection('config').doc('settings').get();
+
+  if (!doc.exists) {
+    // 第一次使用：直接用輸入的密碼建立設定
+    await db.collection('config').doc('settings').set({
+      adminPassword: input,
+      title: '部門聚餐投票',
+      dateRangeStart: '',
+      dateRangeEnd: '',
+      deadline: ''
+    });
+    adminPassword = input;
+    enterAdmin();
+    return;
+  }
+
+  const stored = doc.data().adminPassword;
+  if (!stored || stored === input) {
+    adminPassword = input;
+    enterAdmin();
+  } else {
+    document.getElementById('pw-error').style.display = 'block';
+    document.getElementById('pw-input').value = '';
+    document.getElementById('pw-input').focus();
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !sessionAuthed) checkPassword();
+});
+
+function enterAdmin() {
+  sessionAuthed = true;
+  document.getElementById('auth-gate').style.display = 'none';
+  document.getElementById('admin-body').style.display = 'block';
+  loadAll();
+}
+
+// ── Load ──
+async function loadAll() {
+  await Promise.all([loadSettings(), loadRestaurants(), loadStats(), loadVoterList()]);
+}
+
+async function loadSettings() {
+  const doc = await db.collection('config').doc('settings').get();
+  if (!doc.exists) return;
+  const d = doc.data();
+  document.getElementById('cfg-title').value    = d.title || '';
+  document.getElementById('cfg-start').value    = d.dateRangeStart || '';
+  document.getElementById('cfg-end').value      = d.dateRangeEnd || '';
+  // datetime-local 格式轉換
+  if (d.deadline) {
+    const dt = new Date(d.deadline);
+    const local = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString().slice(0,16);
+    document.getElementById('cfg-deadline').value = local;
+  }
+}
+
+async function loadStats() {
+  const [votesSnap, restSnap] = await Promise.all([
+    db.collection('votes').get(),
+    db.collection('restaurants').get()
+  ]);
+  document.getElementById('stats-row').innerHTML = `
+    <div class="stat-pill">已投票：<span>${votesSnap.size}</span> 人</div>
+    <div class="stat-pill">候選餐廳：<span>${restSnap.size}</span> 間</div>`;
+}
+
+async function loadRestaurants() {
+  const snap = await db.collection('restaurants').orderBy('order').get();
+  const wrap = document.getElementById('restaurant-list');
+
+  if (snap.empty) {
+    wrap.innerHTML = `<div class="empty" style="padding:20px 0"><div class="icon">🍽</div><p>尚無候選餐廳</p></div>`;
+    return;
+  }
+
+  wrap.innerHTML = snap.docs.map((doc, i) => {
+    const d = doc.data();
+    return `
+      <div class="admin-row" id="row-${doc.id}">
+        <div class="admin-row-info">
+          <div class="name">${d.name}</div>
+          ${d.description ? `<div class="desc">${d.description}</div>` : ''}
+        </div>
+        <button class="btn btn-danger" onclick="deleteRestaurant('${doc.id}')">刪除</button>
+      </div>`;
+  }).join('');
+}
+
+// ── Voter List ──
+async function loadVoterList() {
+  const wrap = document.getElementById('voter-list');
+  wrap.innerHTML = `<div style="text-align:center;padding:24px;color:var(--gray-4)">載入中…</div>`;
+
+  const [votesSnap, restSnap] = await Promise.all([
+    db.collection('votes').get(),
+    db.collection('restaurants').get()
+  ]);
+
+  const restMap = {};
+  restSnap.forEach(doc => { restMap[doc.id] = doc.data().name; });
+
+  if (votesSnap.empty) {
+    wrap.innerHTML = `<div class="empty" style="padding:20px 0"><div class="icon">🗳</div><p>尚無人投票</p></div>`;
+    return;
+  }
+
+  wrap.innerHTML = votesSnap.docs.map(doc => {
+    const d = doc.data();
+    const name = doc.id;
+    const unavDates = (d.unavailableDates || []).sort();
+    const unavText = unavDates.length === 0
+      ? '全部都可以'
+      : unavDates.map(ds => {
+          const dt = new Date(ds + 'T00:00:00');
+          const days = ['日','一','二','三','四','五','六'];
+          return `${dt.getMonth()+1}/${dt.getDate()}（${days[dt.getDay()]}）`;
+        }).join('、');
+
+    const restIds = d.restaurantIds || (d.restaurantId ? [d.restaurantId] : []);
+    const restNames = restIds.map(id => restMap[id] || id).join('、') || '—';
+
+    const time = d.updatedAt
+      ? new Date(d.updatedAt.seconds * 1000).toLocaleString('zh-TW', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' })
+      : '';
+
+    return `
+      <div class="admin-row">
+        <div class="admin-row-info" style="flex:1">
+          <div class="name" style="display:flex;align-items:center;gap:8px">
+            ${name}
+            <span style="font-size:12px;color:var(--gray-4);font-weight:400">${time}</span>
+          </div>
+          <div class="desc" style="margin-top:4px">
+            <div>🍽 ${restNames}</div>
+            <div style="margin-top:3px">🚫 不可參加：${unavText}</div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ── Settings ──
+async function saveSettings() {
+  const title    = document.getElementById('cfg-title').value.trim();
+  const start    = document.getElementById('cfg-start').value;
+  const end      = document.getElementById('cfg-end').value;
+  const deadline = document.getElementById('cfg-deadline').value;
+
+  if (start && end && start > end) {
+    showToast('開始日期不能晚於結束日期', 'error');
+    return;
+  }
+
+  await db.collection('config').doc('settings').update({
+    title:          title || '部門聚餐投票',
+    dateRangeStart: start,
+    dateRangeEnd:   end,
+    deadline:       deadline ? new Date(deadline).toISOString() : ''
+  });
+
+  showToast('設定已儲存');
+}
+
+// ── Password ──
+async function changePassword() {
+  const np  = document.getElementById('new-pw').value;
+  const np2 = document.getElementById('new-pw2').value;
+
+  if (!np)        { showToast('請輸入新密碼', 'error'); return; }
+  if (np !== np2) { showToast('兩次密碼不一致', 'error'); return; }
+  if (np.length < 4) { showToast('密碼至少 4 個字元', 'error'); return; }
+
+  await db.collection('config').doc('settings').update({ adminPassword: np });
+  adminPassword = np;
+  document.getElementById('new-pw').value  = '';
+  document.getElementById('new-pw2').value = '';
+  showToast('密碼已更新');
+}
+
+// ── Restaurants ──
+let restOrder = 0;
+
+async function addRestaurant() {
+  const name = document.getElementById('add-name').value.trim();
+  const desc = document.getElementById('add-desc').value.trim();
+
+  if (!name) { showToast('請輸入餐廳名稱', 'error'); return; }
+
+  const snap = await db.collection('restaurants').orderBy('order','desc').limit(1).get();
+  const maxOrder = snap.empty ? 0 : (snap.docs[0].data().order || 0);
+
+  await db.collection('restaurants').add({
+    name,
+    description: desc,
+    order: maxOrder + 1
+  });
+
+  document.getElementById('add-name').value = '';
+  document.getElementById('add-desc').value = '';
+  showToast(`已新增：${name}`);
+  loadRestaurants();
+  loadStats();
+}
+
+async function deleteRestaurant(id) {
+  if (!confirm('確定要刪除這間餐廳嗎？')) return;
+  await db.collection('restaurants').doc(id).delete();
+  showToast('已刪除');
+  loadRestaurants();
+  loadStats();
+}
+
+// ── Clear Votes ──
+async function clearVotes() {
+  if (!confirm('確定要清除所有投票資料嗎？此操作無法復原！')) return;
+  if (!confirm('再次確認：真的要刪除全部投票？')) return;
+
+  const snap = await db.collection('votes').get();
+  const batch = db.batch();
+  snap.forEach(doc => batch.delete(doc.ref));
+  await batch.commit();
+
+  showToast('所有投票資料已清除');
+  loadStats();
+}
+
+// ── Enter key for add ──
+document.addEventListener('keydown', e => {
+  if (!sessionAuthed) return;
+  if (e.key === 'Enter' && document.activeElement.id === 'add-name') addRestaurant();
+});
+</script>
+</body>
+</html>
