@@ -271,7 +271,7 @@ function renderForm(restaurants, cfg) {
 
   document.getElementById('main-container').innerHTML = `
     <!-- 姓名 -->
-    <div class="card">
+    <div class="card" style="max-width:340px;margin-left:auto;margin-right:auto">
       <div class="card-label">你是誰</div>
       <div id="name-display" style="display:none">
         <div class="name-tag">👤 <span id="name-tag-text"></span></div>
@@ -279,11 +279,9 @@ function renderForm(restaurants, cfg) {
       </div>
       <div id="name-input-wrap">
         <div class="step-hint">請輸入你的姓名，同一姓名可在截止前重新投票覆蓋。</div>
-        <div class="input-group">
-          <input type="text" id="name-input" placeholder="請輸入姓名" maxlength="20">
-        </div>
-        <div style="margin-top:12px">
-          <button class="btn btn-primary" onclick="confirmName()">確認</button>
+        <div style="display:flex;gap:10px">
+          <input type="text" id="name-input" placeholder="請輸入姓名" maxlength="20" style="flex:1">
+          <button class="btn btn-primary" onclick="confirmName()" style="width:auto;padding:13px 20px;flex-shrink:0">確認</button>
         </div>
       </div>
     </div>
