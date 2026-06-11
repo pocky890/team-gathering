@@ -73,52 +73,43 @@ let calYear, calMonth;
 let dateAvailMap = {}; // dateStr -> availableCount
 let restaurantVotes = {};
 
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function showMessage(icon, title, text) {
+  document.getElementById('main-container').innerHTML = `
+    <div class="card" style="text-align:center;padding:40px">
+      <div style="font-size:40px;margin-bottom:12px">${icon}</div>
+      <h2>${title}</h2><p style="color:var(--gray-5);margin-top:8px">${text}</p>
+    </div>`;
+}
+
 async function init() {
-  const [configDoc, votesSnap, restSnap] = await Promise.all([
+  const [configDoc, restSnap] = await Promise.all([
     db.collection('config').doc('settings').get(),
-    db.collection('votes').get(),
     db.collection('restaurants').orderBy('order').get()
   ]);
 
   if (!configDoc.exists) {
-    document.getElementById('main-container').innerHTML = `
-      <div class="card" style="text-align:center;padding:40px">
-        <div style="font-size:40px;margin-bottom:12px">⚙️</div>
-        <h2>尚未設定</h2><p style="color:var(--gray-5);margin-top:8px">請管理員完成設定後再查看結果</p>
-      </div>`;
+    showMessage('⚙️', '尚未設定', '請管理員完成設定後再查看結果');
     return;
   }
 
   const cfg = configDoc.data();
   rangeStart = cfg.dateRangeStart;
   rangeEnd   = cfg.dateRangeEnd;
+
+  if (!rangeStart || !rangeEnd) {
+    showMessage('⚙️', '尚未設定', '請管理員完成設定後再查看結果');
+    return;
+  }
+
   if (cfg.title) {
     document.getElementById('page-title').textContent = cfg.title + ' — 結果';
     document.title = cfg.title + ' - 結果';
   }
-
-  // 統計人數
-  totalVoters = votesSnap.size;
-  document.getElementById('page-subtitle').textContent = `共 ${totalVoters} 人投票`;
-
-  // 建立所有日期 map（排除六日）
-  const allDates = getDatesInRange(rangeStart, rangeEnd);
-  allDates.forEach(d => {
-    const dow = new Date(d + 'T00:00:00').getDay();
-    if (dow !== 0 && dow !== 6) dateAvailMap[d] = totalVoters;
-  });
-
-  // 計算每天不可參加人數 → 可參加 = 總人 - 不可參加
-  votesSnap.forEach(doc => {
-    const data = doc.data();
-    (data.unavailableDates || []).forEach(d => {
-      if (dateAvailMap[d] !== undefined) dateAvailMap[d]--;
-    });
-    const ids = data.restaurantIds || (data.restaurantId ? [data.restaurantId] : []);
-    ids.forEach(id => {
-      restaurantVotes[id] = (restaurantVotes[id] || 0) + 1;
-    });
-  });
 
   // 整理餐廳
   const restaurants = [];
@@ -129,7 +120,37 @@ async function init() {
   calMonth = rStart.getMonth();
 
   const isClosed = cfg.deadline ? new Date(cfg.deadline) <= new Date() : false;
-  render(allDates, restaurants, cfg, isClosed);
+  const allDates = getDatesInRange(rangeStart, rangeEnd);
+
+  // 即時監聽投票變化，自動重算並重繪
+  db.collection('votes').onSnapshot(votesSnap => {
+    totalVoters = votesSnap.size;
+    document.getElementById('page-subtitle').textContent = `共 ${totalVoters} 人投票`;
+
+    // 建立所有日期 map（排除六日）
+    dateAvailMap = {};
+    restaurantVotes = {};
+    allDates.forEach(d => {
+      const dow = new Date(d + 'T00:00:00').getDay();
+      if (dow !== 0 && dow !== 6) dateAvailMap[d] = totalVoters;
+    });
+
+    // 計算每天不可參加人數 → 可參加 = 總人 - 不可參加
+    votesSnap.forEach(doc => {
+      const data = doc.data();
+      (data.unavailableDates || []).forEach(d => {
+        if (dateAvailMap[d] !== undefined) dateAvailMap[d]--;
+      });
+      const ids = data.restaurantIds || (data.restaurantId ? [data.restaurantId] : []);
+      ids.forEach(id => {
+        restaurantVotes[id] = (restaurantVotes[id] || 0) + 1;
+      });
+    });
+
+    render(allDates, restaurants, cfg, isClosed);
+  }, () => {
+    showMessage('⚠️', '載入失敗', '無法連線到伺服器，請重新整理頁面');
+  });
 }
 
 function getDatesInRange(start, end) {
@@ -180,7 +201,7 @@ function render(allDates, restaurants, cfg, isClosed) {
     const restWinnerHTML = topRests.map(r => `
       <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--gray-1)">
         <div style="font-size:22px">🏆</div>
-        <div style="flex:1;font-size:15px;font-weight:500">${r.name}</div>
+        <div style="flex:1;font-size:15px;font-weight:500">${escapeHTML(r.name)}</div>
         <div style="font-size:14px;color:var(--gray-5)">${restaurantVotes[r.id]} 票</div>
       </div>`).join('');
 
@@ -251,7 +272,7 @@ function render(allDates, restaurants, cfg, isClosed) {
       html += `<div class="rest-winner">
         <div class="trophy">🏆</div>
         <div>
-          <div class="name">${bestRest.name}</div>
+          <div class="name">${escapeHTML(bestRest.name)}</div>
           <div class="votes">${bestRestVotes} 票 · ${totalRestVotes > 0 ? Math.round(bestRestVotes/totalRestVotes*100) : 0}%</div>
         </div>
       </div>`;
@@ -263,7 +284,7 @@ function render(allDates, restaurants, cfg, isClosed) {
       const isTop = r.id === bestRestId && votes > 0;
       html += `
         <div class="result-row">
-          <div class="result-label">${r.name}</div>
+          <div class="result-label">${escapeHTML(r.name)}</div>
           <div class="result-bar-wrap">
             <div class="result-bar ${isTop?'top':''}" style="width:${pct}%"></div>
           </div>
@@ -273,7 +294,7 @@ function render(allDates, restaurants, cfg, isClosed) {
   }
 
   html += '</div>';
-  html += `<p class="refresh-hint">重新整理頁面以更新結果</p>`;
+  html += `<p class="refresh-hint">結果會即時自動更新</p>`;
 
   document.getElementById('main-container').innerHTML = html;
   renderCalendar(calYear, calMonth);
@@ -360,7 +381,9 @@ function nextMonth() {
   renderCalendar(calYear, calMonth);
 }
 
-init();
+init().catch(() => {
+  showMessage('⚠️', '載入失敗', '無法連線到伺服器，請重新整理頁面');
+});
 </script>
 </body>
 </html>

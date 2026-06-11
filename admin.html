@@ -189,6 +189,12 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
 <script>
+// ── Utils ──
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 // ── 密碼 ──
 let adminPassword = null;
 let sessionAuthed = false;
@@ -223,7 +229,12 @@ async function checkPassword() {
   }
 
   const stored = doc.data().adminPassword;
-  if (!stored || stored === input) {
+  if (!stored) {
+    // 設定存在但密碼是空的：把這次輸入的密碼設為管理密碼，補上漏洞
+    await db.collection('config').doc('settings').update({ adminPassword: input });
+    adminPassword = input;
+    enterAdmin();
+  } else if (stored === input) {
     adminPassword = input;
     enterAdmin();
   } else {
@@ -288,8 +299,8 @@ async function loadRestaurants() {
     return `
       <div class="admin-row" id="row-${doc.id}">
         <div class="admin-row-info">
-          <div class="name">${d.name}</div>
-          ${d.description ? `<div class="desc">${d.description}</div>` : ''}
+          <div class="name">${escapeHTML(d.name)}</div>
+          ${d.description ? `<div class="desc">${escapeHTML(d.description)}</div>` : ''}
         </div>
         <button class="btn btn-danger" onclick="deleteRestaurant('${doc.id}')">刪除</button>
       </div>`;
@@ -337,11 +348,11 @@ async function loadVoterList() {
       <div class="admin-row">
         <div class="admin-row-info" style="flex:1">
           <div class="name" style="display:flex;align-items:center;gap:8px">
-            ${name}
+            ${escapeHTML(name)}
             <span style="font-size:12px;color:var(--gray-4);font-weight:400">${time}</span>
           </div>
           <div class="desc" style="margin-top:4px">
-            <div>🍽 ${restNames}</div>
+            <div>🍽 ${escapeHTML(restNames)}</div>
             <div style="margin-top:3px">🚫 不可參加：${unavText}</div>
           </div>
         </div>
@@ -361,14 +372,17 @@ async function saveSettings() {
     return;
   }
 
-  await db.collection('config').doc('settings').update({
-    title:          title || '部門聚餐投票',
-    dateRangeStart: start,
-    dateRangeEnd:   end,
-    deadline:       deadline ? new Date(deadline).toISOString() : ''
-  });
-
-  showToast('設定已儲存');
+  try {
+    await db.collection('config').doc('settings').update({
+      title:          title || '部門聚餐投票',
+      dateRangeStart: start,
+      dateRangeEnd:   end,
+      deadline:       deadline ? new Date(deadline).toISOString() : ''
+    });
+    showToast('設定已儲存');
+  } catch (e) {
+    showToast('儲存失敗，請稍後再試', 'error');
+  }
 }
 
 // ── Password ──
@@ -380,11 +394,15 @@ async function changePassword() {
   if (np !== np2) { showToast('兩次密碼不一致', 'error'); return; }
   if (np.length < 4) { showToast('密碼至少 4 個字元', 'error'); return; }
 
-  await db.collection('config').doc('settings').update({ adminPassword: np });
-  adminPassword = np;
-  document.getElementById('new-pw').value  = '';
-  document.getElementById('new-pw2').value = '';
-  showToast('密碼已更新');
+  try {
+    await db.collection('config').doc('settings').update({ adminPassword: np });
+    adminPassword = np;
+    document.getElementById('new-pw').value  = '';
+    document.getElementById('new-pw2').value = '';
+    showToast('密碼已更新');
+  } catch (e) {
+    showToast('更新失敗，請稍後再試', 'error');
+  }
 }
 
 // ── Restaurants ──
@@ -396,28 +414,36 @@ async function addRestaurant() {
 
   if (!name) { showToast('請輸入餐廳名稱', 'error'); return; }
 
-  const snap = await db.collection('restaurants').orderBy('order','desc').limit(1).get();
-  const maxOrder = snap.empty ? 0 : (snap.docs[0].data().order || 0);
+  try {
+    const snap = await db.collection('restaurants').orderBy('order','desc').limit(1).get();
+    const maxOrder = snap.empty ? 0 : (snap.docs[0].data().order || 0);
 
-  await db.collection('restaurants').add({
-    name,
-    description: desc,
-    order: maxOrder + 1
-  });
+    await db.collection('restaurants').add({
+      name,
+      description: desc,
+      order: maxOrder + 1
+    });
 
-  document.getElementById('add-name').value = '';
-  document.getElementById('add-desc').value = '';
-  showToast(`已新增：${name}`);
-  loadRestaurants();
-  loadStats();
+    document.getElementById('add-name').value = '';
+    document.getElementById('add-desc').value = '';
+    showToast(`已新增：${name}`);
+    loadRestaurants();
+    loadStats();
+  } catch (e) {
+    showToast('新增失敗，請稍後再試', 'error');
+  }
 }
 
 async function deleteRestaurant(id) {
   if (!confirm('確定要刪除這間餐廳嗎？')) return;
-  await db.collection('restaurants').doc(id).delete();
-  showToast('已刪除');
-  loadRestaurants();
-  loadStats();
+  try {
+    await db.collection('restaurants').doc(id).delete();
+    showToast('已刪除');
+    loadRestaurants();
+    loadStats();
+  } catch (e) {
+    showToast('刪除失敗，請稍後再試', 'error');
+  }
 }
 
 // ── Clear Votes ──
@@ -425,13 +451,18 @@ async function clearVotes() {
   if (!confirm('確定要清除所有投票資料嗎？此操作無法復原！')) return;
   if (!confirm('再次確認：真的要刪除全部投票？')) return;
 
-  const snap = await db.collection('votes').get();
-  const batch = db.batch();
-  snap.forEach(doc => batch.delete(doc.ref));
-  await batch.commit();
+  try {
+    const snap = await db.collection('votes').get();
+    const batch = db.batch();
+    snap.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
 
-  showToast('所有投票資料已清除');
-  loadStats();
+    showToast('所有投票資料已清除');
+    loadStats();
+    loadVoterList();
+  } catch (e) {
+    showToast('清除失敗，請稍後再試', 'error');
+  }
 }
 
 // ── Enter key for add ──

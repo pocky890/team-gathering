@@ -75,6 +75,12 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
 <script>
+// ── Utils ──
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 // ── Toast ──
 function showToast(msg, type = 'success') {
   const t = document.getElementById('toast');
@@ -190,26 +196,39 @@ function toggleRestaurant(id) {
 // ── State ──
 let isClosed = false;
 let currentUserName = null;
+let voteDeadline = null;
+
+function showNotConfigured() {
+  document.getElementById('main-container').innerHTML = `
+    <div class="card closed-overlay">
+      <div class="icon">⚙️</div>
+      <h2>尚未設定</h2>
+      <p>請管理員先完成投票設定</p>
+      <br><a href="admin.html" class="btn btn-secondary btn-sm" style="width:auto;">前往管理頁面</a>
+    </div>`;
+}
 
 // ── Init ──
 async function init() {
   const configDoc = await db.collection('config').doc('settings').get();
 
   if (!configDoc.exists) {
-    document.getElementById('main-container').innerHTML = `
-      <div class="card closed-overlay">
-        <div class="icon">⚙️</div>
-        <h2>尚未設定</h2>
-        <p>請管理員先完成投票設定</p>
-        <br><a href="admin.html" class="btn btn-secondary btn-sm" style="width:auto;">前往管理頁面</a>
-      </div>`;
+    showNotConfigured();
     return;
   }
 
   const cfg = configDoc.data();
   rangeStart = cfg.dateRangeStart;
   rangeEnd   = cfg.dateRangeEnd;
+
+  // 日期範圍尚未設定時，日曆無法運作
+  if (!rangeStart || !rangeEnd) {
+    showNotConfigured();
+    return;
+  }
+
   const deadline = cfg.deadline ? new Date(cfg.deadline) : null;
+  voteDeadline = deadline;
 
   // 標題
   if (cfg.title) {
@@ -242,10 +261,8 @@ async function init() {
   }
 
   // 副標題
-  if (rangeStart && rangeEnd) {
-    document.getElementById('page-subtitle').textContent =
-      `投票期間：${rangeStart} ～ ${rangeEnd}`;
-  }
+  document.getElementById('page-subtitle').textContent =
+    `投票期間：${rangeStart} ～ ${rangeEnd}`;
 
   // 載入餐廳
   const restSnap = await db.collection('restaurants').orderBy('order').get();
@@ -264,8 +281,8 @@ function renderForm(restaurants, cfg) {
         <div class="restaurant-option" data-id="${r.id}" onclick="toggleRestaurant('${r.id}')">
           <div class="radio-circle check-style"></div>
           <div class="restaurant-info">
-            <div class="restaurant-name">${r.name}</div>
-            ${r.description ? `<div class="restaurant-desc">${r.description}</div>` : ''}
+            <div class="restaurant-name">${escapeHTML(r.name)}</div>
+            ${r.description ? `<div class="restaurant-desc">${escapeHTML(r.description)}</div>` : ''}
           </div>
         </div>`).join('');
 
@@ -328,12 +345,22 @@ function renderForm(restaurants, cfg) {
   document.getElementById('name-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') confirmName();
   });
+
+  // 帶入上次使用的姓名
+  const savedName = localStorage.getItem('voterName');
+  if (savedName) document.getElementById('name-input').value = savedName;
 }
 
 function confirmName() {
   const val = document.getElementById('name-input').value.trim();
   if (!val) { showToast('請輸入姓名', 'error'); return; }
+  // Firestore 文件 ID 不允許「/」、「.」、「..」等
+  if (val.includes('/') || val === '.' || val === '..' || /^__.*__$/.test(val)) {
+    showToast('姓名不能包含「/」等特殊字元', 'error');
+    return;
+  }
   currentUserName = val;
+  localStorage.setItem('voterName', val);
   document.getElementById('name-tag-text').textContent = val;
   document.getElementById('name-display').style.display = 'block';
   document.getElementById('name-input-wrap').style.display = 'none';
@@ -361,7 +388,13 @@ function changeName() {
 }
 
 async function loadPreviousVote(name) {
-  const doc = await db.collection('votes').doc(name).get();
+  let doc;
+  try {
+    doc = await db.collection('votes').doc(name).get();
+  } catch (e) {
+    showToast('讀取先前投票失敗，將以空白表單開始', 'error');
+    return;
+  }
   if (!doc.exists) return;
   const data = doc.data();
 
@@ -380,6 +413,16 @@ async function loadPreviousVote(name) {
 
 async function submitVote() {
   if (!currentUserName) { showToast('請先輸入姓名', 'error'); return; }
+
+  // 頁面開著放到超過截止時間的情況
+  if (voteDeadline && new Date() >= voteDeadline) {
+    showToast('投票已截止，無法送出', 'error');
+    return;
+  }
+
+  if (unavailableDates.size === 0 && selectedRestaurants.size === 0) {
+    if (!confirm('你沒有標記不能參加的日期、也沒有選餐廳。\n確定要送出嗎？（表示每天都可以、餐廳都行）')) return;
+  }
 
   const btn = document.getElementById('submit-btn');
   btn.disabled = true;
@@ -401,7 +444,15 @@ async function submitVote() {
   }
 }
 
-init();
+init().catch(() => {
+  document.getElementById('main-container').innerHTML = `
+    <div class="card closed-overlay">
+      <div class="icon">⚠️</div>
+      <h2>載入失敗</h2>
+      <p>無法連線到伺服器，請檢查網路後重試。</p>
+      <br><button class="btn btn-primary" onclick="location.reload()" style="width:auto;padding:12px 28px;">重新載入</button>
+    </div>`;
+});
 </script>
 </body>
 </html>
