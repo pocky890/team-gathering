@@ -373,7 +373,7 @@ async function loadVoterList() {
         }).join('、');
 
     const restIds = d.restaurantIds || (d.restaurantId ? [d.restaurantId] : []);
-    const restNames = restIds.map(id => restMap[id] || id).join('、') || '—';
+    const restNames = restIds.map(id => restMap[id] || '（已刪除的餐廳）').join('、') || '—';
 
     const time = d.updatedAt
       ? new Date(d.updatedAt.seconds * 1000).toLocaleString('zh-TW', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' })
