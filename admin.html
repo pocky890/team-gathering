@@ -288,26 +288,58 @@ async function loadStats() {
     <div class="stat-pill">候選餐廳：<span>${restSnap.size}</span> 間</div>`;
 }
 
+let allRestaurants = [];
+
 async function loadRestaurants() {
   const snap = await db.collection('restaurants').orderBy('order').get();
   const wrap = document.getElementById('restaurant-list');
+  allRestaurants = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-  if (snap.empty) {
+  if (allRestaurants.length === 0) {
     wrap.innerHTML = `<div class="empty" style="padding:20px 0"><div class="icon">🍽</div><p>尚無候選餐廳</p></div>`;
     return;
   }
 
-  wrap.innerHTML = snap.docs.map((doc, i) => {
-    const d = doc.data();
-    return `
-      <div class="admin-row" id="row-${doc.id}">
+  wrap.innerHTML = allRestaurants.map(r => `
+      <div class="admin-row" id="row-${r.id}">
         <div class="admin-row-info">
-          <div class="name">${escapeHTML(d.name)}</div>
-          ${d.description ? `<div class="desc">${escapeHTML(d.description)}</div>` : ''}
+          <div class="name">${escapeHTML(r.name)}</div>
+          ${r.description ? `<div class="desc">${escapeHTML(r.description)}</div>` : ''}
         </div>
-        <button class="btn btn-danger" onclick="deleteRestaurant('${doc.id}')">刪除</button>
-      </div>`;
-  }).join('');
+        <div style="display:flex;gap:8px;flex-shrink:0">
+          <button class="btn btn-secondary btn-sm" onclick="editRestaurant('${r.id}')">編輯</button>
+          <button class="btn btn-danger" onclick="deleteRestaurant('${r.id}')">刪除</button>
+        </div>
+      </div>`).join('');
+}
+
+function editRestaurant(id) {
+  const r = allRestaurants.find(x => x.id === id);
+  if (!r) return;
+  const row = document.getElementById(`row-${id}`);
+  row.innerHTML = `
+    <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+      <input type="text" id="edit-name-${id}" value="${escapeHTML(r.name)}" placeholder="餐廳名稱">
+      <input type="text" id="edit-desc-${id}" value="${escapeHTML(r.description || '')}" placeholder="補充說明" style="background:var(--gray-1)">
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="btn btn-primary btn-sm" style="width:auto" onclick="saveRestaurantEdit('${id}')">儲存</button>
+        <button class="btn btn-secondary btn-sm" style="width:auto" onclick="loadRestaurants()">取消</button>
+      </div>
+    </div>`;
+}
+
+async function saveRestaurantEdit(id) {
+  const name = document.getElementById(`edit-name-${id}`).value.trim();
+  const desc = document.getElementById(`edit-desc-${id}`).value.trim();
+  if (!name) { showToast('請輸入餐廳名稱', 'error'); return; }
+
+  try {
+    await db.collection('restaurants').doc(id).update({ name, description: desc });
+    showToast('已更新');
+    loadRestaurants();
+  } catch (e) {
+    showToast('更新失敗，請稍後再試', 'error');
+  }
 }
 
 // ── Voter List ──
