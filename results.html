@@ -6,19 +6,19 @@
   <title>投票結果</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&family=Noto+Sans+TC:wght@700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=3">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=4">
   <style>
     .winner-card {
-      background: linear-gradient(135deg, #34C759, #30D158);
+      background: var(--green);
       border-radius: var(--radius-lg);
-      padding: 24px;
+      padding: 28px;
       color: #fff;
       text-align: center;
-      box-shadow: 0 4px 20px rgba(52,199,89,.35);
+      box-shadow: 0 8px 24px rgba(22,163,74,.28);
     }
     .winner-card .icon  { font-size: 40px; margin-bottom: 8px; }
-    .winner-card .date  { font-size: 28px; font-weight: 700; letter-spacing: -.5px; margin-bottom: 4px; }
+    .winner-card .date  { font-size: 28px; font-weight: 700; letter-spacing: -.02em; margin-bottom: 4px; }
     .winner-card .count { font-size: 15px; opacity: .85; }
     .tie-badge { background: rgba(255,255,255,.25); border-radius: 6px; padding: 2px 8px; font-size: 13px; margin-left: 8px; }
 
@@ -26,15 +26,14 @@
       display: flex;
       align-items: center;
       gap: 16px;
-      padding: 16px;
-      background: linear-gradient(135deg, #FFF9E6, #FCEFC7);
+      padding: 18px;
+      background: var(--gold-light);
       border-radius: var(--radius-sm);
-      border: 1.5px solid rgba(201,150,46,.30);
-      box-shadow: 0 4px 14px rgba(201,150,46,.16);
-      margin-bottom: 10px;
+      border: 1px solid rgba(202,138,4,.22);
+      margin-bottom: 12px;
     }
-    .rest-winner .trophy { font-size: 28px; filter: drop-shadow(0 3px 6px rgba(201,150,46,.45)); }
-    .rest-winner .name   { font-family: var(--font-display); font-size: 17px; font-weight: 700; color: #8A6A1B; }
+    .rest-winner .trophy { font-size: 28px; }
+    .rest-winner .name   { font-family: var(--font-display); font-size: 17px; font-weight: 700; color: #8A6A1B; letter-spacing: -.02em; }
     .rest-winner .votes  { font-size: 13px; color: #A3873B; margin-top: 2px; }
 
     .refresh-hint {
@@ -60,7 +59,7 @@
   </div>
 </header>
 
-<div class="container" id="main-container">
+<div class="container bento-grid" id="main-container">
   <div class="card" style="text-align:center;padding:48px;">
     <div style="font-size:32px;margin-bottom:12px;">📊</div>
     <div style="color:var(--gray-5);">載入結果中…</div>
@@ -210,7 +209,7 @@ function render(allDates, restaurants, cfg, isClosed) {
       </div>`).join('');
 
     html += `
-      <div class="card" style="border:2px solid var(--green)">
+      <div class="card bento-winner" style="border-color:rgba(22,163,74,.35)">
         <div class="card-label" style="color:var(--green)">投票截止 — 最終結果</div>
         <div style="font-size:13px;font-weight:600;color:var(--gray-5);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">可參加日期排名</div>
         ${dateRankHTML}
@@ -221,7 +220,7 @@ function render(allDates, restaurants, cfg, isClosed) {
 
   // ── 統計卡 ──
   html += `
-    <div class="card">
+    <div class="card bento-stats">
       <div class="card-label">投票統計</div>
       <div class="stat-grid">
         <div class="stat-card">
@@ -242,7 +241,7 @@ function render(allDates, restaurants, cfg, isClosed) {
 
   // ── 日曆 ──
   html += `
-    <div class="card">
+    <div class="card bento-calendar">
       <div class="card-label">每日可參加人數</div>
       <div class="calendar-wrap">
         <div class="cal-nav">
@@ -254,13 +253,13 @@ function render(allDates, restaurants, cfg, isClosed) {
       </div>
       <div class="legend" style="margin-top:16px">
         <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> 最多人可參加</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#BBEDD2"></div> 次多</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--green-light)"></div> 次多</div>
         <div class="legend-item"><div class="legend-dot" style="background:var(--gray-2)"></div> 較少人可參加</div>
       </div>
     </div>`;
 
   // ── 餐廳結果 ──
-  html += `<div class="card">
+  html += `<div class="card bento-rest">
     <div class="card-label">餐廳票選結果</div>`;
 
   if (restaurants.length === 0) {

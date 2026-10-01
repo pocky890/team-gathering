@@ -6,8 +6,8 @@
   <title>管理後台</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&family=Noto+Sans+TC:wght@700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=3">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=4">
   <style>
     .section-gap { display:flex; flex-direction:column; gap:20px; }
     .settings-row {
@@ -31,9 +31,13 @@
       bottom: 20px;
     }
     .danger-zone {
-      border: 1.5px solid var(--red-light);
+      background: var(--surface-glass);
+      backdrop-filter: saturate(140%) blur(14px);
+      -webkit-backdrop-filter: saturate(140%) blur(14px);
+      border: 1.5px solid rgba(225,29,72,.22);
       border-radius: var(--radius-lg);
-      padding: 20px 24px;
+      box-shadow: var(--shadow);
+      padding: 28px;
     }
     .danger-zone h3 { color: var(--red); margin-bottom: 12px; }
     .stat-inline {
