@@ -202,7 +202,8 @@ h3 {
 input[type="text"],
 input[type="password"],
 input[type="date"],
-input[type="datetime-local"] {
+input[type="datetime-local"],
+input[type="number"] {
   width: 100%;
   padding: 15px 18px;
   border: 1.5px solid var(--gray-2);
@@ -212,6 +213,7 @@ input[type="datetime-local"] {
   color: var(--label);
   background: var(--gray-1);
   outline: none;
+  color-scheme: light dark;
   transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
   -webkit-appearance: none;
 }
