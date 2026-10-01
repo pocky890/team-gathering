@@ -185,15 +185,27 @@ function toggleDate(dateStr) {
 
 // ── Restaurant ──
 let selectedRestaurants = new Set();
+let voteLimit = 0; // 0 = 不限
+
 function toggleRestaurant(id) {
   if (selectedRestaurants.has(id)) {
     selectedRestaurants.delete(id);
   } else {
+    if (voteLimit > 0 && selectedRestaurants.size >= voteLimit) {
+      showToast(`最多只能選 ${voteLimit} 間餐廳`, 'error');
+      return;
+    }
     selectedRestaurants.add(id);
   }
   document.querySelectorAll('.restaurant-option').forEach(el => {
     el.classList.toggle('selected', selectedRestaurants.has(el.dataset.id));
   });
+  updateVoteCount();
+}
+
+function updateVoteCount() {
+  const el = document.getElementById('vote-count');
+  if (el) el.textContent = selectedRestaurants.size;
 }
 
 // ── State ──
@@ -232,6 +244,7 @@ async function init() {
 
   const deadline = cfg.deadline ? new Date(cfg.deadline) : null;
   voteDeadline = deadline;
+  voteLimit = cfg.voteLimit || 0;
 
   // 標題
   if (cfg.title) {
@@ -333,7 +346,9 @@ function renderForm(restaurants, cfg) {
     <!-- 餐廳 -->
     <div class="card" id="rest-section" style="display:none">
       <div class="card-label">投票選餐廳</div>
-      <p class="step-hint">選擇你想去的餐廳（可複選）。</p>
+      <p class="step-hint">${voteLimit > 0
+        ? `選擇你想去的餐廳（最多可選 ${voteLimit} 間，已選 <strong id="vote-count">0</strong> / ${voteLimit}）。`
+        : '選擇你想去的餐廳（可複選）。'}</p>
       <div class="restaurant-list">${restHTML}</div>
     </div>
 
@@ -381,6 +396,7 @@ function changeName() {
   currentUserName = null;
   unavailableDates = new Set();
   selectedRestaurants = new Set();
+  updateVoteCount();
   document.getElementById('name-display').style.display = 'none';
   document.getElementById('name-input-wrap').style.display = 'block';
   document.getElementById('name-input').value = '';
@@ -410,6 +426,7 @@ async function loadPreviousVote(name) {
   document.querySelectorAll('.restaurant-option').forEach(el => {
     el.classList.toggle('selected', selectedRestaurants.has(el.dataset.id));
   });
+  updateVoteCount();
 
   showToast('已載入你上次的投票');
 }
