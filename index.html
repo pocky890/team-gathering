@@ -266,7 +266,7 @@ async function init() {
 
   // 副標題
   document.getElementById('page-subtitle').textContent =
-    `投票期間：${rangeStart} ～ ${rangeEnd}`;
+    `聚餐日期區間：${rangeStart} ～ ${rangeEnd}`;
 
   // 載入餐廳
   const restSnap = await db.collection('restaurants').orderBy('order').get();
