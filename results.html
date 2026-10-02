@@ -172,12 +172,8 @@ function render(allDates, restaurants, cfg, isClosed) {
   const maxAvail = Math.max(...Object.values(dateAvailMap), 0);
   const bestDates = Object.keys(dateAvailMap).filter(d => dateAvailMap[d] === maxAvail);
 
-  // 找最高票餐廳
-  let bestRestId = null, bestRestVotes = 0;
-  Object.entries(restaurantVotes).forEach(([id, v]) => {
-    if (v > bestRestVotes) { bestRestVotes = v; bestRestId = id; }
-  });
-  const bestRest = restaurants.find(r => r.id === bestRestId);
+  // 找最高票餐廳（同票並列）
+  const bestRestVotes = Math.max(0, ...restaurants.map(r => restaurantVotes[r.id] || 0));
   const topRests = restaurants.filter(r => (restaurantVotes[r.id] || 0) === bestRestVotes && bestRestVotes > 0);
 
   let html = '';
@@ -271,20 +267,21 @@ function render(allDates, restaurants, cfg, isClosed) {
     const sorted = [...restaurants].sort((a,b) =>
       (restaurantVotes[b.id]||0) - (restaurantVotes[a.id]||0));
 
-    if (bestRest && bestRestVotes > 0) {
+    const tieLabel = topRests.length > 1 ? '並列第一 · ' : '';
+    topRests.forEach(r => {
       html += `<div class="rest-winner">
         <div class="trophy">🏆</div>
         <div>
-          <div class="name">${escapeHTML(bestRest.name)}</div>
-          <div class="votes">${bestRestVotes} 票 · ${totalRestVotes > 0 ? Math.round(bestRestVotes/totalRestVotes*100) : 0}%</div>
+          <div class="name">${escapeHTML(r.name)}</div>
+          <div class="votes">${tieLabel}${bestRestVotes} 票 · ${totalRestVotes > 0 ? Math.round(bestRestVotes/totalRestVotes*100) : 0}%</div>
         </div>
       </div>`;
-    }
+    });
 
     sorted.forEach((r, i) => {
       const votes = restaurantVotes[r.id] || 0;
       const pct   = totalRestVotes > 0 ? Math.round(votes / totalRestVotes * 100) : 0;
-      const isTop = r.id === bestRestId && votes > 0;
+      const isTop = votes === bestRestVotes && votes > 0;
       html += `
         <div class="result-row">
           <div class="result-label">${escapeHTML(r.name)}</div>
