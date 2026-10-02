@@ -118,6 +118,11 @@
       </div>
 
       <div class="input-group" style="margin-top:16px">
+        <label>排除日期（國定假日，週末已自動排除）</label>
+        <input type="text" id="cfg-holidays" placeholder="例：2026-10-09, 2026-10-26（以逗號分隔）">
+      </div>
+
+      <div class="input-group" style="margin-top:16px">
         <label>投票截止時間</label>
         <input type="datetime-local" id="cfg-deadline">
       </div>
@@ -280,6 +285,7 @@ async function loadSettings() {
   document.getElementById('cfg-start').value    = d.dateRangeStart || '';
   document.getElementById('cfg-end').value      = d.dateRangeEnd || '';
   document.getElementById('cfg-vote-limit').value = d.voteLimit || '';
+  document.getElementById('cfg-holidays').value = (d.holidays || []).join(', ');
   // datetime-local 格式轉換
   if (d.deadline) {
     const dt = new Date(d.deadline);
@@ -418,6 +424,14 @@ async function saveSettings() {
     return;
   }
 
+  const holidayTokens = document.getElementById('cfg-holidays').value.split(/[,，、\s]+/).filter(Boolean);
+  const badHoliday = holidayTokens.find(t => !/^\d{4}-\d{2}-\d{2}$/.test(t) || isNaN(new Date(t + 'T00:00:00')));
+  if (badHoliday) {
+    showToast(`日期格式錯誤：${badHoliday}（請用 YYYY-MM-DD）`, 'error');
+    return;
+  }
+  const holidays = [...new Set(holidayTokens)].sort();
+
   const voteLimit = voteLimitInput ? parseInt(voteLimitInput, 10) : 0;
   if (voteLimitInput && (!Number.isInteger(voteLimit) || voteLimit < 1)) {
     showToast('每人可選餐廳數必須是大於 0 的整數', 'error');
@@ -430,7 +444,8 @@ async function saveSettings() {
       dateRangeStart: start,
       dateRangeEnd:   end,
       deadline:       deadline ? new Date(deadline).toISOString() : '',
-      voteLimit:      voteLimit
+      voteLimit:      voteLimit,
+      holidays:       holidays
     });
     showToast('設定已儲存');
   } catch (e) {

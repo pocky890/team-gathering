@@ -124,7 +124,7 @@ function renderCalendar(year, month) {
     const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const dow = new Date(dateStr + 'T00:00:00').getDay();
     const isWeekend = dow === 0 || dow === 6;
-    const inRange = dateStr >= rangeStart && dateStr <= rangeEnd && !isWeekend;
+    const inRange = dateStr >= rangeStart && dateStr <= rangeEnd && !isWeekend && !holidays.has(dateStr);
     const isToday = (d === today.getDate() && month === today.getMonth() && year === today.getFullYear());
     const isUnavailable = unavailableDates.has(dateStr);
 
@@ -186,6 +186,7 @@ function toggleDate(dateStr) {
 // ── Restaurant ──
 let selectedRestaurants = new Set();
 let voteLimit = 0; // 0 = 不限
+let holidays = new Set();
 
 function toggleRestaurant(id) {
   if (selectedRestaurants.has(id)) {
@@ -245,6 +246,7 @@ async function init() {
   const deadline = cfg.deadline ? new Date(cfg.deadline) : null;
   voteDeadline = deadline;
   voteLimit = cfg.voteLimit || 0;
+  holidays = new Set(cfg.holidays || []);
 
   // 標題
   if (cfg.title) {

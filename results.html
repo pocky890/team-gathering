@@ -135,7 +135,7 @@ async function init() {
     restaurantVotes = {};
     allDates.forEach(d => {
       const dow = new Date(d + 'T00:00:00').getDay();
-      if (dow !== 0 && dow !== 6) dateAvailMap[d] = totalVoters;
+      if (dow !== 0 && dow !== 6 && !(cfg.holidays || []).includes(d)) dateAvailMap[d] = totalVoters;
     });
 
     // 計算每天不可參加人數 → 可參加 = 總人 - 不可參加
