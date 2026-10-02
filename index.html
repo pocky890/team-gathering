@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=6">
   <style>
     .deadline-banner {
       background: var(--orange);
@@ -130,6 +130,7 @@ function renderCalendar(year, month) {
 
     let cls = 'cal-day';
     if (!inRange)       cls += ' cal-day--disabled';
+    if (isWeekend || holidays.has(dateStr)) cls += ' cal-day--off';
     if (isToday)        cls += ' cal-day--today';
     if (isUnavailable)  cls += ' cal-day--unavailable';
 

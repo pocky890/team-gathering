@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=6">
   <style>
     .winner-card {
       background: var(--green);
@@ -72,6 +72,7 @@
 <script src="firebase-config.js"></script>
 <script>
 let rangeStart, rangeEnd, totalVoters;
+let holidaySet = new Set();
 let calYear, calMonth;
 let dateAvailMap = {}; // dateStr -> availableCount
 let restaurantVotes = {};
@@ -103,6 +104,7 @@ async function init() {
   const cfg = configDoc.data();
   rangeStart = cfg.dateRangeStart;
   rangeEnd   = cfg.dateRangeEnd;
+  holidaySet = new Set(cfg.holidays || []);
 
   if (!rangeStart || !rangeEnd) {
     showMessage('⚙️', '尚未設定', '請管理員完成設定後再查看結果');
@@ -135,7 +137,7 @@ async function init() {
     restaurantVotes = {};
     allDates.forEach(d => {
       const dow = new Date(d + 'T00:00:00').getDay();
-      if (dow !== 0 && dow !== 6 && !(cfg.holidays || []).includes(d)) dateAvailMap[d] = totalVoters;
+      if (dow !== 0 && dow !== 6 && !holidaySet.has(d)) dateAvailMap[d] = totalVoters;
     });
 
     // 計算每天不可參加人數 → 可參加 = 總人 - 不可參加
@@ -344,6 +346,7 @@ function renderCalendar(year, month) {
     else if (count >= maxV * .75) cls += ' cal-day--good';
     else if (count >= maxV * .4)  cls += ' cal-day--mid';
     else                           cls += ' cal-day--low';
+    if (isWeekend || holidaySet.has(dateStr)) cls += ' cal-day--off';
     if (isToday) cls += ' cal-day--today';
 
     const badge = (inRange && count !== null && totalVoters > 0)
