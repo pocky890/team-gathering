@@ -372,8 +372,15 @@ function renderForm(restaurants, cfg) {
   if (savedName) document.getElementById('name-input').value = savedName;
 }
 
+// 統一大小寫：每個單字首字母大寫、其餘小寫（carl / CARL → Carl），中文不受影響
+function normalizeName(s) {
+  return s.trim().split(/\s+/)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
 function confirmName() {
-  const val = document.getElementById('name-input').value.trim();
+  const val = normalizeName(document.getElementById('name-input').value);
   if (!val) { showToast('請輸入姓名', 'error'); return; }
   // Firestore 文件 ID 不允許「/」、「.」、「..」等
   if (val.includes('/') || val === '.' || val === '..' || /^__.*__$/.test(val)) {
