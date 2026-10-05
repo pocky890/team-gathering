@@ -376,7 +376,10 @@ async function loadVoterList() {
     return;
   }
 
-  wrap.innerHTML = votesSnap.docs.map(doc => {
+  const sortedDocs = [...votesSnap.docs].sort((a, b) =>
+    a.id.localeCompare(b.id, 'zh-TW', { sensitivity: 'base' }));
+
+  wrap.innerHTML = sortedDocs.map(doc => {
     const d = doc.data();
     const name = doc.id;
     const unavDates = (d.unavailableDates || []).sort();
