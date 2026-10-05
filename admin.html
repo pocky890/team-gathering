@@ -488,8 +488,10 @@ async function loadVoterList() {
             <span style="font-size:12px;color:var(--gray-4);font-weight:400">${time}</span>
           </div>
           <div class="desc" style="margin-top:4px">
-            <div>🍽 ${escapeHTML(restNames)}</div>
-            <div style="margin-top:3px">🚫 不可參加：${unavText}</div>
+            ${d.declined
+              ? `<div>🙅 這次無法出席</div>`
+              : `<div>🍽 ${escapeHTML(restNames)}</div>
+            <div style="margin-top:3px">🚫 不可參加：${unavText}</div>`}
           </div>
         </div>
       </div>`;

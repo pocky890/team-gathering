@@ -187,6 +187,7 @@ function toggleDate(dateStr) {
 // ── Restaurant ──
 let selectedRestaurants = new Set();
 let voteLimit = 0; // 0 = 不限
+let declined = false; // 這次無法出席
 let holidays = new Set();
 
 function toggleRestaurant(id) {
@@ -322,6 +323,12 @@ function renderForm(restaurants, cfg) {
       </div>
     </div>
 
+    <!-- 無法出席 -->
+    <div id="decline-section" style="display:none;text-align:center">
+      <button class="btn btn-secondary" id="decline-btn" onclick="setDeclined(!declined)">這次無法出席</button>
+      <p class="step-hint" id="decline-note" style="display:none;margin:14px 0 0">已選擇「這次無法出席」，不用選日期和餐廳，直接送出即可。</p>
+    </div>
+
     <!-- 日曆 -->
     <div class="card" id="vote-sections" style="display:none">
       <div class="card-label">標記不能參加的日期</div>
@@ -394,12 +401,27 @@ function confirmName() {
   document.getElementById('name-input-wrap').style.display = 'none';
 
   // 顯示投票區
-  document.getElementById('vote-sections').style.display = 'block';
-  document.getElementById('rest-section').style.display = 'block';
+  document.getElementById('decline-section').style.display = 'block';
   document.getElementById('submit-section').style.display = 'block';
+  setDeclined(false);
 
   // 嘗試載入舊投票
   loadPreviousVote(val);
+}
+
+function submitLabel() {
+  return declined ? '送出（這次無法出席）' : '送出投票';
+}
+
+function setDeclined(v) {
+  declined = v;
+  const display = v ? 'none' : 'block';
+  document.getElementById('vote-sections').style.display = display;
+  document.getElementById('rest-section').style.display = display;
+  document.getElementById('decline-note').style.display = v ? 'block' : 'none';
+  document.getElementById('decline-btn').textContent = v ? '改為參加' : '這次無法出席';
+  const btn = document.getElementById('submit-btn');
+  if (!btn.disabled) btn.textContent = submitLabel();
 }
 
 function changeName() {
@@ -410,8 +432,10 @@ function changeName() {
   document.getElementById('name-display').style.display = 'none';
   document.getElementById('name-input-wrap').style.display = 'block';
   document.getElementById('name-input').value = '';
+  setDeclined(false);
   document.getElementById('vote-sections').style.display = 'none';
   document.getElementById('rest-section').style.display = 'none';
+  document.getElementById('decline-section').style.display = 'none';
   document.getElementById('submit-section').style.display = 'none';
   renderCalendar(currentYear, currentMonth);
 }
@@ -426,6 +450,12 @@ async function loadPreviousVote(name) {
   }
   if (!doc.exists) return;
   const data = doc.data();
+
+  if (data.declined) {
+    setDeclined(true);
+    showToast('已載入你上次的回覆（這次無法出席）');
+    return;
+  }
 
   // 還原不可參加日期
   unavailableDates = new Set(data.unavailableDates || []);
@@ -450,7 +480,7 @@ async function submitVote() {
     return;
   }
 
-  if (unavailableDates.size === 0 && selectedRestaurants.size === 0) {
+  if (!declined && unavailableDates.size === 0 && selectedRestaurants.size === 0) {
     if (!confirm('你沒有標記不能參加的日期、也沒有選餐廳。\n確定要送出嗎？（表示每天都可以、餐廳都行）')) return;
   }
 
@@ -460,17 +490,18 @@ async function submitVote() {
 
   try {
     await db.collection('votes').doc(currentUserName).set({
-      unavailableDates: Array.from(unavailableDates),
-      restaurantIds: Array.from(selectedRestaurants),
+      declined: declined,
+      unavailableDates: declined ? [] : Array.from(unavailableDates),
+      restaurantIds: declined ? [] : Array.from(selectedRestaurants),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
-    showToast('投票成功！感謝你的參與 🎉');
+    showToast(declined ? '已收到，這次無法出席 👌' : '投票成功！感謝你的參與 🎉');
     btn.textContent = '已送出 ✓';
     setTimeout(() => { btn.disabled = false; btn.textContent = '重新送出'; }, 3000);
   } catch (e) {
     showToast('送出失敗，請稍後再試', 'error');
     btn.disabled = false;
-    btn.textContent = '送出投票';
+    btn.textContent = submitLabel();
   }
 }
 
