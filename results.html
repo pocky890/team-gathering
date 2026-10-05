@@ -79,6 +79,8 @@ let restaurantVotes = {};
 let dateUnavailNames = {}; // dateStr -> [無法參加的姓名]
 let selectedDate = null;
 let declinedNames = []; // 這次無法出席的人
+let memberTotal = 0;    // 部門名單總人數（0 = 未設定）
+let votedText = '';     // 「已回覆/總人數」顯示文字
 
 function escapeHTML(s) {
   return String(s).replace(/[&<>"']/g, c =>
@@ -108,6 +110,7 @@ async function init() {
   rangeStart = cfg.dateRangeStart;
   rangeEnd   = cfg.dateRangeEnd;
   holidaySet = new Set(cfg.holidays || []);
+  memberTotal = (cfg.members || []).length;
 
   if (!rangeStart || !rangeEnd) {
     showMessage('⚙️', '尚未設定', '請管理員完成設定後再查看結果');
@@ -134,8 +137,9 @@ async function init() {
   db.collection('votes').onSnapshot(votesSnap => {
     declinedNames = votesSnap.docs.filter(d => d.data().declined).map(d => d.id);
     totalVoters = votesSnap.size - declinedNames.length;
+    votedText = memberTotal ? `${votesSnap.size}/${memberTotal}` : `${votesSnap.size}`;
     document.getElementById('page-subtitle').textContent =
-      `共 ${totalVoters} 人投票` + (declinedNames.length ? `・${declinedNames.length} 人無法出席` : '');
+      `已投票 ${votedText} 人` + (declinedNames.length ? `・${declinedNames.length} 人無法出席` : '');
 
     // 建立所有日期 map（排除六日）
     dateAvailMap = {};
@@ -232,7 +236,7 @@ function render(allDates, restaurants, cfg, isClosed) {
       <div class="card-label">投票統計</div>
       <div class="stat-grid">
         <div class="stat-card">
-          <div class="number">${totalVoters}</div>
+          <div class="number">${votedText}</div>
           <div class="label">已投票人數</div>
         </div>
         <div class="stat-card">
