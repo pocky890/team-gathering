@@ -203,7 +203,8 @@ input[type="text"],
 input[type="password"],
 input[type="date"],
 input[type="datetime-local"],
-input[type="number"] {
+input[type="number"],
+textarea {
   width: 100%;
   padding: 15px 18px;
   border: 1.5px solid var(--gray-2);
@@ -217,12 +218,12 @@ input[type="number"] {
   transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
   -webkit-appearance: none;
 }
-input:focus {
+input:focus, textarea:focus {
   border-color: var(--blue);
   background: var(--surface);
   box-shadow: 0 0 0 4px var(--blue-light);
 }
-input::placeholder { color: var(--gray-4); }
+input::placeholder, textarea::placeholder { color: var(--gray-4); }
 
 /* ── Buttons ── */
 .btn {
@@ -417,6 +418,8 @@ input::placeholder { color: var(--gray-4); }
   font-size: 13px;
   font-weight: 600;
 }
+.name-chip.neutral { background: var(--gray-2); color: var(--label-2); }
+textarea { resize: vertical; line-height: 1.6; }
 .date-detail-ok { font-size: 14px; color: var(--green); font-weight: 600; }
 
 /* ── Legend ── */

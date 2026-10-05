@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
   <style>
     .section-gap { display:flex; flex-direction:column; gap:20px; }
     .settings-row {
@@ -188,6 +188,19 @@
       </div>
     </div>
 
+    <!-- 部門名單 / 未投票 -->
+    <div class="card">
+      <div class="card-label">部門名單與未投票</div>
+      <div class="input-group">
+        <label>部門名單（貼上即可，姓名以分號或換行分隔，Outlook 收件人格式也可）</label>
+        <textarea id="members-input" rows="4" placeholder="例：Aries Hong; Asan Liu; Kai Wang"></textarea>
+      </div>
+      <div style="margin-top:14px">
+        <button class="btn btn-secondary" onclick="saveMembers()" style="width:auto;padding:12px 24px">儲存名單</button>
+      </div>
+      <div id="not-voted" style="margin-top:24px"></div>
+    </div>
+
     <!-- 危險區域 -->
     <div class="danger-zone">
       <h3>危險區域</h3>
@@ -286,6 +299,9 @@ async function loadSettings() {
   document.getElementById('cfg-end').value      = d.dateRangeEnd || '';
   document.getElementById('cfg-vote-limit').value = d.voteLimit || '';
   document.getElementById('cfg-holidays').value = (d.holidays || []).join(', ');
+  members = d.members || [];
+  document.getElementById('members-input').value = members.join('\n');
+  renderNotVoted();
   // datetime-local 格式轉換
   if (d.deadline) {
     const dt = new Date(d.deadline);
@@ -358,6 +374,69 @@ async function saveRestaurantEdit(id) {
   }
 }
 
+// ── 部門名單 / 未投票 ──
+let members = [];
+let voterIds = [];
+
+function parseMembers(text) {
+  const names = text.split(/[;\n]+/)
+    .map(s => s.replace(/<[^>]*>/g, '').trim())
+    .filter(Boolean);
+  return [...new Set(names)];
+}
+
+// 投票者多半只填名字，所以用「全名 / 名字完全相符」優先，其次「名字開頭相符」（至少 3 個字母）
+function matchVoters(memberList, voters) {
+  const remaining = new Set(memberList);
+  const firstName = m => m.split(/\s+/)[0].toLowerCase();
+  const unmatched = [];
+  const pending = [];
+
+  voters.forEach(v => {
+    const key = v.trim().toLowerCase();
+    const hit = [...remaining].find(m => m.toLowerCase() === key || firstName(m) === key);
+    if (hit) remaining.delete(hit); else pending.push(v);
+  });
+  pending.forEach(v => {
+    const key = v.trim().toLowerCase();
+    const hit = key.length >= 3 && [...remaining].find(m => firstName(m).startsWith(key));
+    if (hit) remaining.delete(hit); else unmatched.push(v);
+  });
+  return { notVoted: [...remaining], unmatched };
+}
+
+function renderNotVoted() {
+  const el = document.getElementById('not-voted');
+  if (!el) return;
+  if (members.length === 0) {
+    el.innerHTML = `<div style="font-size:13px;color:var(--gray-4)">貼上部門名單並儲存後，這裡會列出還沒投票的人。</div>`;
+    return;
+  }
+  const { notVoted, unmatched } = matchVoters(members, voterIds);
+  const sort = arr => [...arr].sort((a, b) => a.localeCompare(b, 'zh-TW', { sensitivity: 'base' }));
+  const chips = (arr, cls = '') => sort(arr).map(n => `<span class="name-chip ${cls}">${escapeHTML(n)}</span>`).join('');
+
+  el.innerHTML = `
+    <div class="date-detail-label">未投票（${notVoted.length} / ${members.length} 人）</div>
+    <div class="name-chips">${notVoted.length ? chips(notVoted) : '<span class="date-detail-ok">全員都投票了 🎉</span>'}</div>
+    ${unmatched.length ? `
+      <div class="date-detail-label" style="margin-top:20px">投票名稱對不上名單（${unmatched.length} 人）</div>
+      <div class="name-chips">${chips(unmatched, 'neutral')}</div>` : ''}`;
+}
+
+async function saveMembers() {
+  const list = parseMembers(document.getElementById('members-input').value);
+  try {
+    await db.collection('config').doc('settings').update({ members: list });
+    members = list;
+    document.getElementById('members-input').value = list.join('\n');
+    renderNotVoted();
+    showToast(`名單已儲存（${list.length} 人）`);
+  } catch (e) {
+    showToast('儲存失敗，請稍後再試', 'error');
+  }
+}
+
 // ── Voter List ──
 async function loadVoterList() {
   const wrap = document.getElementById('voter-list');
@@ -370,6 +449,9 @@ async function loadVoterList() {
 
   const restMap = {};
   restSnap.forEach(doc => { restMap[doc.id] = doc.data().name; });
+
+  voterIds = votesSnap.docs.map(doc => doc.id);
+  renderNotVoted();
 
   if (votesSnap.empty) {
     wrap.innerHTML = `<div class="empty" style="padding:20px 0"><div class="icon">🗳</div><p>尚無人投票</p></div>`;
