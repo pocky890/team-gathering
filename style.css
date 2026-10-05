@@ -387,6 +387,38 @@ input::placeholder { color: var(--gray-4); }
   border: 1.5px solid var(--surface);
 }
 
+.cal-day--selected { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+/* ── Date detail（結果頁點選日期） ── */
+.date-detail {
+  margin-top: 20px;
+  padding: 18px 20px;
+  background: var(--gray-1);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius);
+}
+.date-detail-hint { font-size: 13px; color: var(--gray-4); text-align: center; }
+.date-detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-size: 15px;
+}
+.date-detail-head span { font-size: 13px; color: var(--gray-5); }
+.date-detail-label { font-size: 12px; font-weight: 600; color: var(--gray-5); margin-bottom: 8px; }
+.name-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.name-chip {
+  padding: 5px 12px;
+  border-radius: 100px;
+  background: var(--red-light);
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 600;
+}
+.date-detail-ok { font-size: 14px; color: var(--green); font-weight: 600; }
+
 /* ── Legend ── */
 .legend {
   display: flex;

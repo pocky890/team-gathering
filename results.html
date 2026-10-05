@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="style.css?v=7">
   <style>
     .winner-card {
       background: var(--green);
@@ -76,6 +76,8 @@ let holidaySet = new Set();
 let calYear, calMonth;
 let dateAvailMap = {}; // dateStr -> availableCount
 let restaurantVotes = {};
+let dateUnavailNames = {}; // dateStr -> [無法參加的姓名]
+let selectedDate = null;
 
 function escapeHTML(s) {
   return String(s).replace(/[&<>"']/g, c =>
@@ -135,6 +137,7 @@ async function init() {
     // 建立所有日期 map（排除六日）
     dateAvailMap = {};
     restaurantVotes = {};
+    dateUnavailNames = {};
     allDates.forEach(d => {
       const dow = new Date(d + 'T00:00:00').getDay();
       if (dow !== 0 && dow !== 6 && !holidaySet.has(d)) dateAvailMap[d] = totalVoters;
@@ -144,7 +147,10 @@ async function init() {
     votesSnap.forEach(doc => {
       const data = doc.data();
       (data.unavailableDates || []).forEach(d => {
-        if (dateAvailMap[d] !== undefined) dateAvailMap[d]--;
+        if (dateAvailMap[d] !== undefined) {
+          dateAvailMap[d]--;
+          (dateUnavailNames[d] = dateUnavailNames[d] || []).push(doc.id);
+        }
       });
       const ids = data.restaurantIds || (data.restaurantId ? [data.restaurantId] : []);
       ids.forEach(id => {
@@ -254,6 +260,7 @@ function render(allDates, restaurants, cfg, isClosed) {
         <div class="legend-item"><div class="legend-dot" style="background:var(--green-light)"></div> 次多</div>
         <div class="legend-item"><div class="legend-dot" style="background:var(--gray-2)"></div> 較少人可參加</div>
       </div>
+      <div class="date-detail" id="date-detail"></div>
     </div>`;
 
   // ── 餐廳結果 ──
@@ -300,6 +307,33 @@ function render(allDates, restaurants, cfg, isClosed) {
 
   document.getElementById('main-container').innerHTML = html;
   renderCalendar(calYear, calMonth);
+  renderDateDetail();
+}
+
+function selectDate(ds) {
+  selectedDate = selectedDate === ds ? null : ds;
+  renderCalendar(calYear, calMonth);
+  renderDateDetail();
+}
+
+function renderDateDetail() {
+  const el = document.getElementById('date-detail');
+  if (!el) return;
+  if (!selectedDate || dateAvailMap[selectedDate] === undefined) {
+    el.innerHTML = `<div class="date-detail-hint">點選日期，查看誰無法參加</div>`;
+    return;
+  }
+  const names = [...(dateUnavailNames[selectedDate] || [])].sort((a, b) => a.localeCompare(b, 'zh-TW'));
+  const chips = names.length
+    ? names.map(n => `<span class="name-chip">${escapeHTML(n)}</span>`).join('')
+    : `<span class="date-detail-ok">所有人都可以 🎉</span>`;
+  el.innerHTML = `
+    <div class="date-detail-head">
+      <strong>${formatDate(selectedDate)}</strong>
+      <span>${dateAvailMap[selectedDate]} / ${totalVoters} 人可參加</span>
+    </div>
+    ${names.length ? `<div class="date-detail-label">無法參加（${names.length} 人）</div>` : ''}
+    <div class="name-chips">${chips}</div>`;
 }
 
 function formatDate(dateStr) {
@@ -348,11 +382,13 @@ function renderCalendar(year, month) {
     else                           cls += ' cal-day--low';
     if (isWeekend || holidaySet.has(dateStr)) cls += ' cal-day--off';
     if (isToday) cls += ' cal-day--today';
+    if (dateStr === selectedDate) cls += ' cal-day--selected';
 
     const badge = (inRange && count !== null && totalVoters > 0)
       ? `<span class="count-badge">${count}</span>` : '';
 
-    html += `<div class="${cls}">${d}${badge}</div>`;
+    const clickAttr = inRange ? ` onclick="selectDate('${dateStr}')"` : '';
+    html += `<div class="${cls}"${clickAttr}>${d}${badge}</div>`;
   }
 
   const total = startDow + last;
