@@ -295,6 +295,10 @@ input::placeholder, textarea::placeholder { color: var(--gray-4); }
 .btn-icon:hover { transform: scale(1.06); }
 .btn-icon:disabled { opacity: .35; cursor: default; transform: none; }
 
+/* ── 投票模式（無法出席 / 沒意見配合大家） ── */
+.mode-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.mode-btn.active { background: var(--blue-light); border-color: var(--blue); }
+
 /* ── Calendar ── */
 .calendar-wrap { user-select: none; }
 .cal-nav {

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=8">
+  <link rel="stylesheet" href="style.css?v=9">
   <style>
     .section-gap { display:flex; flex-direction:column; gap:20px; }
     .settings-row {
@@ -490,6 +490,8 @@ async function loadVoterList() {
           <div class="desc" style="margin-top:4px">
             ${d.declined
               ? `<div>🙅 這次無法出席</div>`
+              : d.noPreference
+              ? `<div>🤝 沒意見，配合大家</div>`
               : `<div>🍽 ${escapeHTML(restNames)}</div>
             <div style="margin-top:3px">🚫 不可參加：${unavText}</div>`}
           </div>
