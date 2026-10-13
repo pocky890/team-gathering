@@ -196,22 +196,11 @@ function render(allDates, restaurants, cfg, isClosed) {
 
   // ── 截止後排名卡 ──
   if (isClosed && totalVoters > 0) {
-    // 日期排名：取前5名（平手全列）
-    const sorted = Object.entries(dateAvailMap)
-      .sort((a, b) => b[1] - a[1]);
-    const top5Cutoff = [...new Set(sorted.map(e => e[1]))].slice(0, 5);
-    const top5Dates = sorted.filter(e => top5Cutoff.includes(e[1]));
-
-    const dateRankHTML = top5Dates.map(([ds, count], i) => {
-      const rank = top5Cutoff.indexOf(count) + 1;
-      const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
-      return `
-        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--gray-1)">
-          <div style="font-size:22px;flex:0 0 32px;text-align:center">${medals[rank-1] || rank}</div>
-          <div style="flex:1;font-size:15px;font-weight:500">${formatDate(ds)}</div>
-          <div style="font-size:14px;color:var(--gray-5)">${count} / ${totalVoters} 人可參加</div>
-        </div>`;
-    }).join('');
+    // 只列可參加人數最多的日期（同人數全列）
+    const topDates = bestDates.slice().sort();
+    const dateRankHTML = `
+      <div style="font-size:14px;color:var(--gray-5);margin-bottom:10px">🥇 ${maxAvail} / ${totalVoters} 人可參加（${topDates.length} 天並列）</div>
+      <div class="name-chips">${topDates.map(ds => `<span class="name-chip" style="background:var(--green-light);color:var(--green);font-size:14px">${formatDate(ds)}</span>`).join('')}</div>`;
 
     const restWinnerHTML = topRests.map(r => `
       <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--gray-1)">
@@ -223,7 +212,7 @@ function render(allDates, restaurants, cfg, isClosed) {
     html += `
       <div class="card bento-winner" style="border-color:rgba(22,163,74,.35)">
         <div class="card-label" style="color:var(--green)">投票截止 — 最終結果</div>
-        <div style="font-size:13px;font-weight:600;color:var(--gray-5);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">可參加日期排名</div>
+        <div style="font-size:13px;font-weight:600;color:var(--gray-5);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">最多人可參加的日期</div>
         ${dateRankHTML}
         <div style="font-size:13px;font-weight:600;color:var(--gray-5);margin:16px 0 8px;text-transform:uppercase;letter-spacing:.4px">餐廳票選結果</div>
         ${restWinnerHTML || '<div style="color:var(--gray-4);font-size:14px;padding:8px 0">尚無餐廳票數</div>'}
